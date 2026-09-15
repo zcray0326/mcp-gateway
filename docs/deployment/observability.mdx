@@ -1,0 +1,98 @@
+---
+title: "Observability with OpenTelemetry"
+description: "Use OpenTelemetry to monitor mcp-gateway and all MCP interactions in your infrastructure."
+---
+
+MCP Gateway emits Prometheus-compatible metrics using OpenTelemetry and exposes them at the `/metrics` endpoint.
+
+This gives you a simple operational view of tool traffic and latency across your registered MCP servers.
+
+## When metrics are enabled
+
+- In **enterprise mode**, metrics are enabled by default.
+- In **development mode**, metrics are disabled by default.
+
+To enable them in development mode:
+
+```bash
+export OTEL_ENABLED=true
+export OTEL_RESOURCE_ATTRIBUTES=deployment.environment.name=development
+
+mcp-gateway start
+```
+
+<Note>
+  You can also set `OTEL_ENABLED=false` in enterprise mode if you explicitly want to disable metrics, but that is not the recommended operating posture for shared deployments.
+</Note>
+
+## Metrics endpoint
+
+Once MCP Gateway is running with telemetry enabled:
+
+```bash
+curl http://localhost:8080/metrics
+```
+
+The response uses standard Prometheus text exposition format.
+
+## Available metrics
+
+| Metric | Type | Description |
+|---|---|---|
+| `mcp_gateway_tool_calls_ratio_total` | Counter | Total number of tool calls handled by MCP Gateway. |
+| `mcp_gateway_tool_call_latency_seconds` | Histogram | Latency for tool calls, in seconds. |
+
+Both metrics include these labels:
+
+| Label | Description |
+|---|---|
+| `mcp_server_name` | Name of the upstream MCP server that owns the tool. |
+| `tool_name` | Canonical tool name, for example `calculator__add`. |
+| `outcome` | `success` or `error`. |
+
+## Example output
+
+```text
+# HELP mcp_gateway_tool_calls_ratio_total Total number of tool calls
+# TYPE mcp_gateway_tool_calls_ratio_total counter
+mcp_gateway_tool_calls_ratio_total{mcp_server_name="calculator",tool_name="add",outcome="success"} 42
+
+# HELP mcp_gateway_tool_call_latency_seconds Latency of tool calls in seconds
+# TYPE mcp_gateway_tool_call_latency_seconds histogram
+mcp_gateway_tool_call_latency_seconds_count{mcp_server_name="calculator",tool_name="add",outcome="success"} 42
+```
+
+## Prometheus
+
+The production Compose path ships with a Prometheus service already configured to scrape MCP Gateway:
+
+```yaml
+scrape_configs:
+  - job_name: 'mcp-gateway'
+    static_configs:
+      - targets: ['mcp-gateway:8080']
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+```
+
+If you run your own Prometheus stack, scrape the gateway's `/metrics` endpoint directly.
+
+## Feedback
+If you want to see more metrics or have feedback on the current ones, please share your thoughts in the [GitHub discussions](https://github.com/orgs/mcp-gateway/discussions) or open an [Issue](https://github.com/zcray0326/mcp-gateway/issues).
+
+## Related pages
+
+<CardGroup cols={2}>
+  <Card title="Production deployment" icon="cloud" href="/deployment/production">
+    Run MCP Gateway in enterprise mode with the right operational defaults.
+  </Card>
+  <Card title="Database" icon="database" href="/deployment/database">
+    Back your shared deployment with PostgreSQL.
+  </Card>
+  <Card title="Governance overview" icon="lock" href="/governance/overview">
+    Understand the enterprise operating model around authentication and client access.
+  </Card>
+  <Card title="Reference: environment variables" icon="sliders" href="/reference/environment-variables">
+    See the full environment variable reference for telemetry and deployment tuning.
+  </Card>
+</CardGroup>

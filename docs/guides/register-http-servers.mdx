@@ -1,0 +1,194 @@
+---
+title: "Add Streamable HTTP MCP servers"
+description: "Register remote MCP servers in mcp-gateway using CLI. Expose them via the mcp gateway."
+---
+
+MCP servers using the [Streamable HTTP transport](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports#streamable-http) can be added to MCP Gateway.
+
+Once registered, a server's tools, prompts, and resources are available to any MCP client that connects to mcp-gateway mcp endpoint.
+
+## Register a server with CLI flags
+
+The quickest way to register a Streamable HTTP server is with the `register` command and inline flags:
+
+```bash
+mcp-gateway register --name context7 --url https://mcp.context7.com/mcp
+```
+
+Here's an example of adding a custom MCP server running on your local machine
+
+```bash
+mcp-gateway register --name calculator --description "Provides some basic math tools" --url http://127.0.0.1:5000/mcp
+```
+
+<Note>
+If MCP Gateway is running inside Docker on macOS or Windows, the container cannot reach `127.0.0.1` on your host. Use `host.docker.internal` instead:
+
+```bash
+mcp-gateway register --name calculator --description "Provides some basic math tools" --url http://host.docker.internal:5000/mcp
+```
+</Note>
+
+## Register a server from a config file
+
+For servers that need authentication or custom headers — or when you want to keep registration configs in version control — use a JSON config file:
+
+```bash
+mcp-gateway register -c ./deepwiki.json
+```
+
+The full config file format for a Streamable HTTP server is:
+
+```json
+{
+  "name": "deepwiki",
+  "transport": "streamable_http",
+  "description": "Deepwiki MCP Server",
+  "url": "https://mcp.deepwiki.com/mcp",
+  "bearer_token": "<optional bearer token>",
+  "oauth_redirect_uri": "http://127.0.0.1:38291/oauth/callback",
+  "oauth_client_id": "<optional pre-registered client id>",
+  "oauth_client_secret": "<optional pre-registered client secret>",
+  "oauth_scopes": ["mcp.read"],
+  "session_mode": "stateless",
+  "headers": {
+    "<custom-header>": "<value>"
+  }
+}
+```
+
+| Field          | Required | Description                                                                                                                  |
+| -------------- | -------- |------------------------------------------------------------------------------------------------------------------------------|
+| `name`         | Yes      | Unique identifier for this server. No spaces, special characters, or consecutive underscores.                                |
+| `transport`    | Yes      | Must be `"streamable_http"`. Other possible values are `"sse"` and `"stdio"`.                                                |
+| `description`  | No       | Human-readable description surfaced in the CLI and API.                                                                      |
+| `url`          | Yes      | The full URL of the MCP server's endpoint (e.g., `https://example.com/mcp`). Required when transport is streamable http.     |
+| `bearer_token` | No       | If set, MCP Gateway adds `Authorization: Bearer <token>` to every request to this server.                                      |
+| `oauth_redirect_uri` | No | Redirect URI to use if the upstream server requires OAuth. When using the CLI interactively, MCP Gateway can usually generate a localhost callback automatically. |
+| `oauth_client_id` | No | Optional pre-registered OAuth client ID to use instead of dynamic client registration. |
+| `oauth_client_secret` | No | Optional OAuth client secret paired with `oauth_client_id`. |
+| `oauth_scopes` | No | Optional list of scopes to request during the upstream OAuth flow. |
+| `session_mode` | No       | `stateless` (default) creates a new connection per tool call. `stateful` reuses a persistent session across tool calls.      |
+| `headers`      | No       | Map of additional HTTP headers to forward. If `Authorization` is set here, it overrides `bearer_token`.                      |
+
+## Authenticating with a bearer token
+
+Many SaaS-hosted MCP servers require a static API token. Pass it with the `--bearer-token` flag:
+
+```bash
+mcp-gateway register \
+  --name huggingface \
+  --description "HuggingFace MCP Server" \
+  --url https://huggingface.co/mcp \
+  --bearer-token <your-hf-api-token>
+```
+
+Or include it in the config file:
+
+```json
+{
+  "name": "huggingface",
+  "transport": "streamable_http",
+  "description": "HuggingFace MCP Server",
+  "url": "https://huggingface.co/mcp",
+  "bearer_token": "<your-hf-api-token>"
+}
+```
+
+For servers that need a custom `Authorization` format or additional headers, use the `headers` field directly:
+
+```json
+{
+  "name": "sourcegraph",
+  "transport": "streamable_http",
+  "url": "https://sourcegraph.mycompany.com/.api/mcp",
+  "headers": {
+    "Authorization": "token <your-sourcegraph-token>",
+    "X-Custom-Header": "custom-value"
+  }
+}
+```
+
+## Upstream OAuth flow
+
+<Note>
+Upstream OAuth support is currently in beta.
+</Note>
+
+If the upstream MCP server responds with `401 Unauthorized` and advertises OAuth, MCP Gateway can complete that authorization flow during registration.
+
+Typical CLI flow:
+
+```bash
+mcp-gateway register --name todoist --url https://ai.todoist.net/mcp
+```
+
+What happens next:
+
+1. MCP Gateway attempts a normal registration first.
+2. If the upstream server requires OAuth, the CLI opens your browser.
+3. You approve access.
+4. MCP Gateway stores the resulting upstream token and completes registration automatically.
+
+If you are registering through a JSON config file or a non-interactive client, you can also provide explicit OAuth settings:
+
+```json
+{
+  "name": "todoist",
+  "transport": "streamable_http",
+  "url": "https://ai.todoist.net/mcp",
+  "oauth_redirect_uri": "http://127.0.0.1:8085/oauth/callback",
+  "oauth_scopes": ["mcp.read"]
+}
+```
+
+If you already have pre-registered OAuth client credentials with the upstream authorization server, include `oauth_client_id` and `oauth_client_secret` as well.
+
+## Environment variable substitution
+
+JSON config files support `${VAR_NAME}` placeholders in string fields, including URLs, bearer tokens, and header values.
+
+See the [configuration file reference](/reference/config-file#$var_name-placeholder-substitution) for the exact substitution rules and examples.
+
+## Verify the registration
+
+After registering a server, inspect what MCP Gateway discovered:
+
+```bash
+mcp-gateway list tools
+
+# get the usage schema of a tool
+mcp-gateway usage deepwiki__read_wiki_structure
+
+# call a tool from cli
+mcp-gateway invoke deepwiki__read_wiki_structure --input '{"repoName": "facebook/react"}'
+```
+
+That is the quickest way to confirm both the upstream server and MCP Gateway routing are working as expected.
+
+## Deregister a server
+
+To remove a server from MCP Gateway:
+
+```bash
+mcp-gateway deregister deepwiki
+```
+
+Deregistering removes the server and all the tools, prompts, and resources it provided. They are no longer accessible by clients using mcp-gateway.
+
+## Related pages
+
+<CardGroup cols={2}>
+  <Card title="STDIO servers" icon="terminal" href="/guides/register-stdio-servers">
+    Register local process-based MCP servers using JSON config files.
+  </Card>
+  <Card title="Connect Claude Desktop" icon="plug" href="/integrations/claude">
+    Connect Claude Desktop to MCP Gateway and start using your registered tools through one MCP endpoint.
+  </Card>
+  <Card title="Tools and prompts" icon="toolbox" href="/guides/tools-and-prompts">
+    List, invoke, enable, disable, and retrieve what registered servers expose.
+  </Card>
+  <Card title="Config file reference" icon="file-code" href="/reference/config-file">
+    See the full JSON schema details for server registration files.
+  </Card>
+</CardGroup>

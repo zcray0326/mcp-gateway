@@ -1,0 +1,476 @@
+package cmd
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/zcray0326/mcp-gateway/pkg/testhelpers"
+	"github.com/zcray0326/mcp-gateway/pkg/version"
+)
+
+func TestStartCommandStructure(t *testing.T) {
+	t.Run("start command has correct properties", func(t *testing.T) {
+		if startServerCmd.Use != "start" {
+			t.Errorf("Expected start command Use to be 'start', got %s", startServerCmd.Use)
+		}
+		if startServerCmd.Short != "Start the MCP Gateway server" {
+			t.Errorf("Expected start command Short to be 'Start the MCP Gateway server', got %s", startServerCmd.Short)
+		}
+	})
+
+	t.Run("start command has correct annotations", func(t *testing.T) {
+		if startServerCmd.Annotations == nil {
+			t.Fatal("Start command missing annotations")
+		}
+
+		group, hasGroup := startServerCmd.Annotations["group"]
+		if !hasGroup {
+			t.Fatal("Start command missing 'group' annotation")
+		}
+		if group != string(subCommandGroupBasic) {
+			t.Errorf("Expected start command group to be 'basic', got %s", group)
+		}
+
+		order, hasOrder := startServerCmd.Annotations["order"]
+		if !hasOrder {
+			t.Fatal("Start command missing 'order' annotation")
+		}
+		if order != "1" {
+			t.Errorf("Expected start command order to be '1', got %s", order)
+		}
+	})
+}
+
+func TestStartCommandFlags(t *testing.T) {
+	t.Run("start command has port flag", func(t *testing.T) {
+		if portFlag := startServerCmd.Flags().Lookup("port"); portFlag == nil {
+			t.Fatal("Start command missing 'port' flag")
+		} else if portFlag.Usage == "" {
+			t.Error("Port flag should have usage description")
+		}
+	})
+
+	t.Run("start command has host flag", func(t *testing.T) {
+		if hostFlag := startServerCmd.Flags().Lookup("host"); hostFlag == nil {
+			t.Fatal("Start command missing 'host' flag")
+		} else if hostFlag.Usage == "" {
+			t.Error("host flag should have usage description")
+		}
+	})
+
+	t.Run("start command has sqlite db path flag", func(t *testing.T) {
+		if sqlitePathFlag := startServerCmd.Flags().Lookup("sqlite-db-path"); sqlitePathFlag == nil {
+			t.Fatal("Start command missing 'sqlite-db-path' flag")
+		} else if sqlitePathFlag.Usage == "" {
+			t.Error("sqlite-db-path flag should have usage description")
+		}
+	})
+
+	t.Run("start command has enterprise flag", func(t *testing.T) {
+		if enterpriseFlag := startServerCmd.Flags().Lookup("enterprise"); enterpriseFlag == nil {
+			t.Fatal("Start command missing 'enterprise' flag")
+		} else if enterpriseFlag.Usage == "" {
+			t.Error("enterprise flag should have usage description")
+		}
+	})
+
+	t.Run("start command has prod flag", func(t *testing.T) {
+		if prodFlag := startServerCmd.Flags().Lookup("prod"); prodFlag == nil {
+			t.Fatal("Start command missing 'prod' flag")
+		} else if prodFlag.Usage == "" {
+			t.Error("prod flag should have usage description")
+		}
+	})
+}
+
+func withBindHostFlag(t *testing.T, value string, changed bool, fn func()) {
+	t.Helper()
+
+	hostFlag := startServerCmd.Flags().Lookup("host")
+	if hostFlag == nil {
+		t.Fatal("Start command missing 'host' flag")
+	}
+
+	originalValue := startServerCmdBindHost
+	originalChanged := hostFlag.Changed
+
+	startServerCmdBindHost = value
+	hostFlag.Changed = changed
+	defer func() {
+		startServerCmdBindHost = originalValue
+		hostFlag.Changed = originalChanged
+	}()
+
+	fn()
+}
+
+func TestGetBindHost(t *testing.T) {
+	t.Run("returns empty string when unset", func(t *testing.T) {
+		withBindHostFlag(t, "", false, func() {
+			withEnv(map[string]string{
+				BindHostEnvVar: "",
+			}, func() {
+				if got := getBindHost(startServerCmd); got != "" {
+					t.Fatalf("expected empty bind host, got %q", got)
+				}
+			})
+		})
+	})
+
+	t.Run("uses env var when flag is unset", func(t *testing.T) {
+		withBindHostFlag(t, "", false, func() {
+			withEnv(map[string]string{
+				BindHostEnvVar: "127.0.0.1",
+			}, func() {
+				if got := getBindHost(startServerCmd); got != "127.0.0.1" {
+					t.Fatalf("expected env bind host, got %q", got)
+				}
+			})
+		})
+	})
+
+	t.Run("flag takes precedence over env var", func(t *testing.T) {
+		withBindHostFlag(t, "0.0.0.0", true, func() {
+			withEnv(map[string]string{
+				BindHostEnvVar: "127.0.0.1",
+			}, func() {
+				if got := getBindHost(startServerCmd); got != "0.0.0.0" {
+					t.Fatalf("expected flag bind host, got %q", got)
+				}
+			})
+		})
+	})
+
+	t.Run("explicit empty flag overrides env var", func(t *testing.T) {
+		withBindHostFlag(t, "", true, func() {
+			withEnv(map[string]string{
+				BindHostEnvVar: "127.0.0.1",
+			}, func() {
+				if got := getBindHost(startServerCmd); got != "" {
+					t.Fatalf("expected empty bind host from explicit flag, got %q", got)
+				}
+			})
+		})
+	})
+}
+
+func TestNewProxyServers_AdvertiseCurrentVersion(t *testing.T) {
+	mcpProxyServer, sseMcpProxyServer := newProxyServers()
+
+	testhelpers.AssertMCPServerInfo(
+		t,
+		mcpProxyServer,
+		"MCP Gateway Proxy MCP Server",
+		version.GetVersion(),
+	)
+	testhelpers.AssertMCPServerInfo(
+		t,
+		sseMcpProxyServer,
+		"MCP Gateway Proxy MCP Server for SSE transport",
+		version.GetVersion(),
+	)
+}
+
+// Helper to set and unset env vars for a test
+func withEnv(env map[string]string, fn func()) {
+	originals := make(map[string]string)
+	for k, v := range env {
+		originals[k] = os.Getenv(k)
+		os.Setenv(k, v)
+	}
+	fn()
+	for k, v := range originals {
+		os.Setenv(k, v)
+	}
+}
+
+// Helper to create a temp file with content
+func writeTempFile(t *testing.T, content string) string {
+	t.Helper()
+	tmp := t.TempDir()
+	f := filepath.Join(tmp, "val")
+	if err := os.WriteFile(f, []byte(content), 0o600); err != nil {
+		t.Fatalf("failed to write temp file: %v", err)
+	}
+	return f
+}
+
+func TestGetPostgresDSN(t *testing.T) {
+	baseEnv := map[string]string{
+		PostgresHostEnvVar:     "localhost",
+		PostgresPortEnvVar:     "5433",
+		PostgresUserEnvVar:     "user",
+		PostgresPasswordEnvVar: "pass",
+		PostgresDBEnvVar:       "mydb",
+	}
+
+	t.Run("returns false if POSTGRES_HOST is not set", func(t *testing.T) {
+		withEnv(map[string]string{
+			PostgresHostEnvVar: "",
+		}, func() {
+			dsn, ok, err := getPostgresDSN()
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if ok {
+				t.Errorf("expected ok=false, got true")
+			}
+			if dsn != "" {
+				t.Errorf("expected empty dsn, got %q", dsn)
+			}
+		})
+	})
+
+	t.Run("uses all env vars", func(t *testing.T) {
+		withEnv(baseEnv, func() {
+			dsn, ok, err := getPostgresDSN()
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !ok {
+				t.Errorf("expected ok=true, got false")
+			}
+			want := "postgres://user:pass@localhost:5433/mydb"
+			if dsn != want {
+				t.Errorf("expected dsn %q, got %q", want, dsn)
+			}
+		})
+	})
+
+	t.Run("uses defaults for missing optional vars", func(t *testing.T) {
+		withEnv(map[string]string{
+			PostgresHostEnvVar: "host",
+		}, func() {
+			dsn, ok, err := getPostgresDSN()
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !ok {
+				t.Errorf("expected ok=true, got false")
+			}
+			want := "postgres://postgres:@host:5432/postgres"
+			if dsn != want {
+				t.Errorf("expected dsn %q, got %q", want, dsn)
+			}
+		})
+	})
+
+	t.Run("uses _FILE env for DB, user, password", func(t *testing.T) {
+		dbFile := writeTempFile(t, "filedb")
+		userFile := writeTempFile(t, "fileuser")
+		passFile := writeTempFile(t, "filepass")
+		withEnv(map[string]string{
+			PostgresHostEnvVar:               "host",
+			PostgresDBEnvVar + "_FILE":       dbFile,
+			PostgresUserEnvVar + "_FILE":     userFile,
+			PostgresPasswordEnvVar + "_FILE": passFile,
+		}, func() {
+			dsn, ok, err := getPostgresDSN()
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !ok {
+				t.Errorf("expected ok=true, got false")
+			}
+			want := "postgres://fileuser:filepass@host:5432/filedb"
+			if dsn != want {
+				t.Errorf("expected dsn %q, got %q", want, dsn)
+			}
+		})
+	})
+
+	t.Run("env var takes precedence over _FILE", func(t *testing.T) {
+		dbFile := writeTempFile(t, "filedb")
+		withEnv(map[string]string{
+			PostgresHostEnvVar:         "host",
+			PostgresDBEnvVar:           "envdb",
+			PostgresDBEnvVar + "_FILE": dbFile,
+		}, func() {
+			dsn, ok, err := getPostgresDSN()
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !ok {
+				t.Errorf("expected ok=true, got false")
+			}
+			want := "postgres://postgres:@host:5432/envdb"
+			if dsn != want {
+				t.Errorf("expected dsn %q, got %q", want, dsn)
+			}
+		})
+	})
+
+	t.Run("returns error if _FILE cannot be read", func(t *testing.T) {
+		withEnv(map[string]string{
+			PostgresHostEnvVar:         "host",
+			PostgresDBEnvVar + "_FILE": "/nonexistent/file",
+		}, func() {
+			_, ok, err := getPostgresDSN()
+			if err == nil {
+				t.Fatal("expected error, got nil")
+			}
+			if ok {
+				t.Errorf("expected ok=false, got true")
+			}
+		})
+	})
+
+	t.Run("trims whitespace from _FILE values", func(t *testing.T) {
+		dbFile := writeTempFile(t, "  dbwithspace \n")
+		withEnv(map[string]string{
+			PostgresHostEnvVar:         "host",
+			PostgresDBEnvVar + "_FILE": dbFile,
+		}, func() {
+			dsn, ok, err := getPostgresDSN()
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !ok {
+				t.Errorf("expected ok=true, got false")
+			}
+			want := "postgres://postgres:@host:5432/dbwithspace"
+			if dsn != want {
+				t.Errorf("expected dsn %q, got %q", want, dsn)
+			}
+		})
+	})
+
+	t.Run("empty password is allowed", func(t *testing.T) {
+		withEnv(map[string]string{
+			PostgresHostEnvVar: "host",
+			PostgresUserEnvVar: "user",
+		}, func() {
+			dsn, ok, err := getPostgresDSN()
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !ok {
+				t.Errorf("expected ok=true, got false")
+			}
+			want := "postgres://user:@host:5432/postgres"
+			if dsn != want {
+				t.Errorf("expected dsn %q, got %q", want, dsn)
+			}
+		})
+	})
+}
+
+func TestGetSQLiteDBPathOverride(t *testing.T) {
+	t.Run("returns empty string when unset", func(t *testing.T) {
+		originalFlag := startServerCmdSQLiteDBPath
+		startServerCmdSQLiteDBPath = ""
+		defer func() {
+			startServerCmdSQLiteDBPath = originalFlag
+		}()
+
+		withEnv(map[string]string{
+			SQLiteDBPathEnvVar: "",
+		}, func() {
+			if got := getSQLiteDBPathOverride(); got != "" {
+				t.Fatalf("expected empty sqlite db path, got %q", got)
+			}
+		})
+	})
+
+	t.Run("uses env var when flag is unset", func(t *testing.T) {
+		originalFlag := startServerCmdSQLiteDBPath
+		startServerCmdSQLiteDBPath = ""
+		defer func() {
+			startServerCmdSQLiteDBPath = originalFlag
+		}()
+
+		withEnv(map[string]string{
+			SQLiteDBPathEnvVar: "  /tmp/.mcp-gateway.db \n",
+		}, func() {
+			if got := getSQLiteDBPathOverride(); got != "/tmp/.mcp-gateway.db" {
+				t.Fatalf("expected env sqlite db path, got %q", got)
+			}
+		})
+	})
+
+	t.Run("flag takes precedence over env var", func(t *testing.T) {
+		originalFlag := startServerCmdSQLiteDBPath
+		startServerCmdSQLiteDBPath = " ./custom.db "
+		defer func() {
+			startServerCmdSQLiteDBPath = originalFlag
+		}()
+
+		withEnv(map[string]string{
+			SQLiteDBPathEnvVar: "/tmp/.mcp-gateway.db",
+		}, func() {
+			if got := getSQLiteDBPathOverride(); got != "./custom.db" {
+				t.Fatalf("expected flag sqlite db path, got %q", got)
+			}
+		})
+	})
+}
+
+func TestGetMcpServerInitReqTimeout(t *testing.T) {
+	t.Run("returns default when unset or empty", func(t *testing.T) {
+		withEnv(map[string]string{
+			McpServerInitReqTimeoutSecEnvVar: "",
+		}, func() {
+			v, err := getMcpServerInitReqTimeout()
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if v != McpServerInitRequestTimeoutSecondsDefault {
+				t.Fatalf("expected default %d, got %d", McpServerInitRequestTimeoutSecondsDefault, v)
+			}
+		})
+	})
+
+	t.Run("parses valid integer value", func(t *testing.T) {
+		withEnv(map[string]string{
+			McpServerInitReqTimeoutSecEnvVar: "5",
+		}, func() {
+			v, err := getMcpServerInitReqTimeout()
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if v != 5 {
+				t.Fatalf("expected 5, got %d", v)
+			}
+		})
+	})
+
+	t.Run("trims whitespace before parsing", func(t *testing.T) {
+		withEnv(map[string]string{
+			McpServerInitReqTimeoutSecEnvVar: "  10 \n",
+		}, func() {
+			v, err := getMcpServerInitReqTimeout()
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if v != 10 {
+				t.Fatalf("expected 10, got %d", v)
+			}
+		})
+	})
+
+	t.Run("returns error for non-integer", func(t *testing.T) {
+		withEnv(map[string]string{
+			McpServerInitReqTimeoutSecEnvVar: "abc",
+		}, func() {
+			_, err := getMcpServerInitReqTimeout()
+			if err == nil {
+				t.Fatal("expected error for non-integer value, got nil")
+			}
+		})
+	})
+
+	t.Run("returns error for values less than 1", func(t *testing.T) {
+		cases := []string{"0", "-1"}
+		for _, c := range cases {
+			withEnv(map[string]string{
+				McpServerInitReqTimeoutSecEnvVar: c,
+			}, func() {
+				_, err := getMcpServerInitReqTimeout()
+				if err == nil {
+					t.Fatalf("expected error for value %q, got nil", c)
+				}
+			})
+		}
+	})
+}

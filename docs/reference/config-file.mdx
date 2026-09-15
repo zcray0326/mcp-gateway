@@ -1,0 +1,245 @@
+---
+title: "CLI configuration file"
+description: "Reference for ~/.mcp-gateway.conf"
+---
+
+The MCP Gateway CLI reads a YAML configuration file at `~/.mcp-gateway.conf` on startup. It stores two values: the URL of the MCP Gateway server and an access token for authenticated requests. Most users never edit this file by hand — `mcp-gateway init-server` and `mcp-gateway login` write to it automatically.
+
+## Client config file (`~/.mcp-gateway.conf`)
+
+### Location and format
+
+The file lives in your home directory and uses YAML syntax:
+
+```yaml
+registry_url: http://my-server:9000
+access_token: 1YHf2LwE1LXtp5lW_vM-gmdYHlPHdqwnILitBhXE4Aw
+```
+
+Both fields are optional. If either is absent the CLI falls back to its default value or prompts you to supply it via a CLI flag.
+
+### Supported fields
+
+<ParamField path="registry_url" type="string" default="http://127.0.0.1:8080">
+  Base URL of the MCP Gateway server the CLI connects to. Set this to avoid passing `--registry` on every command.
+
+  ```yaml
+  registry_url: http://my-server:9000
+  ```
+</ParamField>
+
+<ParamField path="access_token" type="string">
+  Bearer token sent in the `Authorization: Bearer` header with every API request. Required when the server runs in enterprise mode. Populated automatically by `mcp-gateway init-server` (admin token) or `mcp-gateway login` (user token).
+
+  ```yaml
+  access_token: 1YHf2LwE1LXtp5lW_vM-gmdYHlPHdqwnILitBhXE4Aw
+  ```
+</ParamField>
+
+### Value precedence
+
+When the CLI resolves the registry URL it uses the following order, highest priority first:
+
+1. `--registry` flag passed explicitly on the command line
+2. `registry_url` set in `~/.mcp-gateway.conf`
+3. Built-in default (`http://127.0.0.1:8080`)
+
+<Tip>
+  If you pass `--registry` manually but `registry_url` is not yet in your config file, the CLI prints a tip suggesting you add it to avoid repeating the flag.
+</Tip>
+
+### Populating the file automatically
+
+`~/.mcp-gateway.conf` is usually created or updated in one of two ways:
+
+- `mcp-gateway init-server` writes the initial admin credentials during enterprise bootstrap
+- `mcp-gateway login <user-token>` stores a user token for later authenticated CLI use
+
+You can also edit the file manually if needed.
+
+For the enterprise bootstrap flow and login workflow, see [Enterprise operations](/reference/cli-enterprise).
+
+---
+
+## JSON config file formats
+
+Several `mcp-gateway` commands accept a `-c` / `--conf` flag pointing to a JSON file instead of inline CLI flags. This section documents every supported JSON format.
+
+### `${VAR_NAME}` placeholder substitution
+
+All JSON config files support environment variable placeholders in string fields. Before sending the request to the server, the CLI expands every `${VAR_NAME}` occurrence using the current shell environment.
+
+Rules:
+- Only `${VAR_NAME}` syntax is recognized — not `$VAR_NAME`.
+- Placeholders can appear anywhere inside a string, including as a substring: `"prefix-${VAR}-suffix"`.
+- Substitution runs in the CLI process, so the variable must be set in the environment where you run the command.
+- Placeholders resolve in all string fields, including nested objects and string arrays.
+- If a referenced variable is not set, the command fails with a descriptive error.
+
+```json
+{
+  "name": "${MCP_SERVER_NAME}",
+  "transport": "streamable_http",
+  "url": "https://api.example.com/workspaces/${WORKSPACE_ID}/mcp",
+  "bearer_token": "${API_TOKEN}"
+}
+```
+
+### Register a Streamable HTTP server
+
+Used with `mcp-gateway register -c <file>`.
+
+```json
+{
+  "name": "calculator",
+  "transport": "streamable_http",
+  "description": "Provides basic math tools",
+  "url": "http://127.0.0.1:8000/mcp",
+  "bearer_token": "<optional bearer token>",
+  "oauth_redirect_uri": "http://127.0.0.1:8085/oauth/callback",
+  "oauth_client_id": "<optional pre-registered client id>",
+  "oauth_client_secret": "<optional client secret>",
+  "oauth_scopes": ["mcp.read"],
+  "headers": {
+    "<custom-header>": "<value>"
+  }
+}
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | Yes | Unique name for this server in MCP Gateway. |
+| `transport` | string | Yes | Must be `"streamable_http"`. |
+| `description` | string | No | Human-readable description. |
+| `url` | string | Yes | Full URL of the MCP server endpoint. |
+| `bearer_token` | string | No | If set, MCP Gateway adds `Authorization: Bearer <token>` to every upstream request. |
+| `oauth_redirect_uri` | string | No | Redirect URI used if the upstream MCP server requires OAuth during registration. |
+| `oauth_client_id` | string | No | Optional pre-registered OAuth client ID. |
+| `oauth_client_secret` | string | No | Optional OAuth client secret paired with `oauth_client_id`. |
+| `oauth_scopes` | string array | No | Optional list of scopes to request during upstream OAuth authorization. |
+| `headers` | object | No | Additional HTTP headers to forward. A `"Authorization"` entry here overrides `bearer_token`. |
+
+<Note>
+  Upstream OAuth support is currently beta.
+
+  For interactive CLI use, you usually do not need to set `oauth_redirect_uri` manually. MCP Gateway can provision a localhost callback automatically when the upstream MCP server actually requires OAuth.
+</Note>
+
+### Register a STDIO server
+
+Used with `mcp-gateway register -c <file>`.
+
+```json
+{
+  "name": "filesystem",
+  "transport": "stdio",
+  "description": "Filesystem MCP server",
+  "command": "npx",
+  "args": ["-y", "@modelcontextprotocol/server-filesystem", "."],
+  "env": {
+    "KEY": "value"
+  },
+  "session_mode": "stateless"
+}
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | Yes | Unique name for this server in MCP Gateway. |
+| `transport` | string | Yes | Must be `"stdio"`. |
+| `description` | string | No | Human-readable description. |
+| `command` | string | Yes | Executable to run the MCP server process (e.g., `"npx"`, `"uvx"`). |
+| `args` | string array | No | Arguments passed to `command`. |
+| `env` | object | No | Environment variables injected into the server process. |
+| `session_mode` | string | No | Connection lifecycle: `"stateless"` (default) creates a new process per call; `"stateful"` keeps the process alive between calls. |
+
+### Create a tool group
+
+Used with `mcp-gateway create group -c <file>`.
+
+```json
+{
+  "name": "claude-tools",
+  "description": "Tools exposed to Claude Desktop",
+  "included_tools": [
+    "filesystem__read_file",
+    "time__get_current_time"
+  ],
+  "included_servers": ["deepwiki"],
+  "excluded_tools": ["deepwiki__search"]
+}
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | Yes | Unique name for the tool group. |
+| `description` | string | No | Human-readable description. |
+| `included_tools` | string array | No | Explicit list of tools to include, in `<server>__<tool>` format. |
+| `included_servers` | string array | No | Server names whose entire tool set is included. |
+| `excluded_tools` | string array | No | Tools to remove from the final set. Exclusions are always applied last, regardless of how a tool was included. |
+
+<Note>
+  At least one of `included_tools` or `included_servers` should be set, otherwise the group will be empty.
+</Note>
+
+### Create an MCP client
+
+Used with `mcp-gateway create mcp-client --conf <file>` (enterprise mode).
+
+```json
+{
+  "name": "cursor-local",
+  "allowed_servers": ["calculator", "github"],
+  "access_token": "my_secret_token_123",
+  "access_token_ref": {
+    "file": "/run/secrets/mcp_gateway_token",
+    "env": "MCP_GATEWAY_CLIENT_TOKEN"
+  }
+}
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | Yes | Unique name for this MCP client. |
+| `allowed_servers` | string array | No | Server names the client may access. Use `"*"` to allow all servers. Omit to deny all. |
+| `access_token` | string | No | Inline token value. For testing only. |
+| `access_token_ref.file` | string | No | Path to a plain-text file containing only the token string. |
+| `access_token_ref.env` | string | No | Name of an environment variable containing the token string. |
+
+<Warning>
+  When creating a client from a config file, you must supply a token via `access_token` or `access_token_ref`. MCP Gateway cannot print a generated token back to the console when reading from a file.
+</Warning>
+
+### Token supply strategies
+
+For MCP client and user config files, there are three ways to supply a custom token:
+
+1. `access_token`
+2. `access_token_ref.file`
+3. `access_token_ref.env`
+
+Use `access_token` only for testing or throwaway setups. For anything more serious, prefer file- or environment-based secrets.
+
+### Create a user account
+
+Used with `mcp-gateway create user --conf <file>` (enterprise mode).
+
+```json
+{
+  "name": "charlie",
+  "access_token": "charlies_secret_token",
+  "access_token_ref": {
+    "file": "/path/to/token-file.txt",
+    "env": "CHARLIE_TOKEN"
+  }
+}
+```
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | Yes | Unique username. |
+| `access_token` | string | No | Inline token value. For testing only. |
+| `access_token_ref.file` | string | No | Path to a plain-text file containing only the token string. |
+| `access_token_ref.env` | string | No | Name of an environment variable containing the token string. |
+
+The same `${VAR_NAME}` placeholder substitution applies to user config files. When using a config file you must supply a token — MCP Gateway cannot print a generated one to the console.

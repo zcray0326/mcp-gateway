@@ -1,0 +1,45 @@
+---
+title: "Current limitations"
+description: "Current limitations in mcp-gateway and known gaps to account for when planning a deployment or integration."
+---
+
+MCP Gateway currently has a few limitations to be aware of.
+
+We're actively working on some of these to address them as quickly as possible.
+
+## OAuth for upstream authentication
+
+MCP Gateway supports OAuth flows for upstream HTTP MCP server registration, but with some limitations:
+
+- the feature is currently beta
+- the OAuth grant is gateway-scoped, not per downstream user
+- the primary workflow is registration-time authorization
+
+## OAuth, SSO and OIDC for downstream clients
+
+MCP Gateway also does not yet support OAuth, single sign-on, or OpenID Connect for downstream clients connecting to the MCP Gateway gateway itself.
+
+Today, the supported model for downstream client authentication is a static access token.
+
+Clients can use either:
+
+- auto-generated tokens created by MCP Gateway
+- custom tokens supplied by operators
+
+If you want stronger external control over token lifecycle, you can manage custom tokens outside MCP Gateway using tools such as Vault or AWS KMS and then supply those tokens to MCP Gateway clients.
+
+We're working on adding support for these in the coming months.
+
+## Prompts & Resources in Tool Groups
+
+Prompts and Resources are not currently exposed through Tool Group endpoints.
+
+The main gateway endpoint `/mcp` can surface everything.
+
+But group-specific endpoints work well with tools only.
+
+## MCPs and Groups in enterprise mode
+
+In enterprise mode, only administrators can add MCP servers and create Tool Groups at the moment.
+
+Normal users cannot yet do this.

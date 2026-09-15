@@ -1,0 +1,151 @@
+{
+  "projectType": "infrastructure",
+  "projectName": "MCP Gateway",
+  "projectDescription": "A self-hosted MCP Gateway that lets developers register and manage multiple Model Context Protocol servers and expose them as a single unified endpoint for AI agents.",
+  "theme": "aspen",
+  "primaryColor": "#5c64f4",
+  "lightColor": "#acb4fc",
+  "darkColor": "#ffffff",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "deployment/docker",
+              "deployment/production",
+              "deployment/database"
+            ]
+          },
+          {
+            "group": "Managing MCP Servers",
+            "pages": [
+              "guides/register-servers",
+              "guides/stdio-servers",
+              "guides/session-modes",
+              "guides/enable-disable"
+            ]
+          },
+          {
+            "group": "Tool Groups",
+            "pages": [
+              "guides/tool-groups",
+              "guides/prompts"
+            ]
+          },
+          {
+            "group": "Enterprise",
+            "pages": [
+              "enterprise/overview",
+              "enterprise/access-control",
+              "enterprise/observability"
+            ]
+          },
+          {
+            "group": "Integrations",
+            "pages": [
+              "integrations/claude",
+              "integrations/cursor",
+              "integrations/copilot"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Reference",
+        "groups": [
+          {
+            "group": "CLI Commands",
+            "pages": [
+              "reference/cli-overview",
+              "reference/cli-server",
+              "reference/cli-tools",
+              "reference/cli-groups",
+              "reference/cli-enterprise"
+            ]
+          },
+          {
+            "group": "HTTP API",
+            "pages": [
+              "reference/api-overview",
+              "reference/api-servers",
+              "reference/api-tools",
+              "reference/api-groups",
+              "reference/api-clients"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "reference/config-file",
+              "reference/environment-variables"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Unified MCP gateway exposing all registered MCP servers through a single /mcp endpoint",
+    "Support for both Streamable HTTP and STDIO MCP server transports",
+    "Tool Groups for exposing subsets of tools to specific MCP clients",
+    "Enterprise mode with Access Control Lists (ACLs) for per-client server access",
+    "Stateful and stateless connection modes to handle cold-start latency",
+    "Bearer token and custom header authentication for upstream MCP servers",
+    "OpenTelemetry/Prometheus metrics for observability",
+    "SQLite (dev) and PostgreSQL (production) database support",
+    "Self-hosted with Docker Compose and minimal container image",
+    "MCP Prompts support for registering and retrieving prompts from MCP servers"
+  ],
+  "publicApiSurface": [
+    "GET /health",
+    "GET /metadata",
+    "POST /init",
+    "ANY /mcp (Streamable HTTP MCP proxy)",
+    "ANY /sse (SSE MCP proxy)",
+    "GET /v0/groups/:name/mcp",
+    "GET /api/v0/servers",
+    "POST /api/v0/servers",
+    "DELETE /api/v0/servers/:name",
+    "POST /api/v0/servers/:name/enable",
+    "POST /api/v0/servers/:name/disable",
+    "GET /api/v0/tools",
+    "POST /api/v0/tools/invoke",
+    "POST /api/v0/tools/enable",
+    "POST /api/v0/tools/disable",
+    "GET /api/v0/prompts",
+    "GET /api/v0/prompt",
+    "POST /api/v0/prompts/render",
+    "GET /api/v0/tool-groups",
+    "POST /api/v0/tool-groups",
+    "DELETE /api/v0/tool-groups/:name",
+    "GET /api/v0/clients",
+    "POST /api/v0/clients",
+    "GET /api/v0/users",
+    "POST /api/v0/users",
+    "GET /metrics",
+    "mcp-gateway start",
+    "mcp-gateway register",
+    "mcp-gateway deregister",
+    "mcp-gateway list servers|tools|groups|prompts",
+    "mcp-gateway invoke",
+    "mcp-gateway enable|disable tool|server|prompt",
+    "mcp-gateway create group|mcp-client|user",
+    "mcp-gateway get group|prompt",
+    "mcp-gateway delete group",
+    "mcp-gateway usage",
+    "mcp-gateway init-server",
+    "mcp-gateway login",
+    "mcp-gateway version"
+  ]
+}

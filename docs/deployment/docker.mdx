@@ -1,0 +1,142 @@
+---
+title: "Run mcp-gateway with Docker Compose"
+description: "Use Docker Compose to run mcp-gateway locally or as a shared deployment."
+---
+
+Docker Compose is the recommended way to run mcp-gateway for individuals running it locally.
+
+Teams deploying mcp-gateway to a remote server can also use Docker Compose with the production configuration, or choose a more customized deployment approach.
+
+The repository ships 2 docker compose files:
+
+- [docker-compose.yaml](https://github.com/zcray0326/mcp-gateway/blob/main/docker-compose.yaml) - optimized for local for individual users
+- [docker-compose.prod.yaml](https://github.com/zcray0326/mcp-gateway/blob/main/docker-compose.prod.yaml) - optimized for a shared deployment running in enterprise mode
+
+## Development mode
+
+`docker-compose.yaml` is the fastest path to a working local setup. It starts MCP Gateway in development mode alongside Postgres and uses the `latest-stdio` image by default, which includes `npx` and `uvx` for common STDIO server workflows.
+
+<Steps>
+  <Step title="Download the compose file">
+    ```bash
+    curl -O https://raw.githubusercontent.com/zcray0326/mcp-gateway/refs/heads/main/docker-compose.yaml
+    ```
+  </Step>
+  <Step title="Start the server">
+    ```bash
+    docker compose up -d
+    ```
+  </Step>
+  <Step title="Verify the server is running">
+    ```bash
+    curl http://localhost:8080/health
+    ```
+
+    The server listens on port `8080` by default. You can override this with the `HOST_PORT` environment variable.
+  </Step>
+</Steps>
+
+<Note>
+If MCP Gateway is running inside Docker on macOS or Windows, the container cannot reach `127.0.0.1` on your host. Use `host.docker.internal` instead when registering MCP servers that run on your host machine:
+
+```bash
+mcp-gateway register --name calculator --url http://host.docker.internal:5000/mcp
+```
+</Note>
+
+<Note>
+If you plan to run the `filesystem` stdio MCP server from inside the container, see [Register a stdio MCP server](/guides/register-stdio-servers#running-in-docker-filesystem-access) for the required `/host` mount pattern and config example.
+</Note>
+
+<Note>
+You can also run the mcp-gateway image as a standalone container instead of using the Compose files provided by the repository.
+
+Keep in mind that if you do not connect MCP Gateway to a PostgreSQL database, it will create a local SQLite file inside the container.
+
+If the container is deleted, that SQLite file is deleted with it and mcp-gateway's data is lost.
+
+Running MCP Gateway as a standalone container without an external database is only recommended for testing and proofs of concept.
+</Note>
+
+## Enterprise mode
+
+`docker-compose.prod.yaml` starts MCP Gateway in enterprise mode. It is intended for a shared deployment where access is authenticated and metrics are expected to be available.
+
+<Steps>
+  <Step title="Download the compose file">
+    ```bash
+    curl -O https://raw.githubusercontent.com/zcray0326/mcp-gateway/refs/heads/main/docker-compose.prod.yaml
+    ```
+  </Step>
+  <Step title="Start the server">
+    ```bash
+    docker compose -f docker-compose.prod.yaml up -d
+    ```
+  </Step>
+  <Step title="Initialize the server">
+    After the first boot, run `init-server` from your client machine to create the admin user and store its access token:
+
+    ```bash
+    mcp-gateway init-server
+    ```
+
+    See the [production deployment guide](/deployment/production) for the full initialization and operating model.
+  </Step>
+</Steps>
+
+## Choosing an image
+
+MCP Gateway publishes two Docker image variants:
+
+| Image tag | Base | Includes | Size |
+|-----------|------|----------|------|
+| `latest` | `distroless/base` | `mcp-gateway` binary only | Minimal |
+| `latest-stdio` | `uv` (Debian) | `mcp-gateway` + `npx` + `uvx` | Larger |
+
+- `docker-compose.yaml` defaults to `latest-stdio` — suitable for local use with stdio-based MCP servers like `filesystem`, `time`, and `github`.
+- `docker-compose.prod.yaml` defaults to `latest` — the minimal image recommended for production.
+
+If you need stdio support in enterprise mode, override the image tag:
+
+```bash
+MCP_GATEWAY_IMAGE_TAG=latest-stdio docker compose -f docker-compose.prod.yaml up -d
+```
+
+<Note>
+  If your stdio servers rely on dependencies other than `npx` or `uvx`, you need to build a custom Docker image that includes those dependencies alongside the `mcp-gateway` binary.
+</Note>
+
+## Graceful shutdown
+
+MCP Gateway should be stopped cleanly so it can close active connections and flush in-flight work.
+
+For Compose-managed deployments, use:
+
+```bash
+docker compose down
+```
+
+For a single container, `docker stop` is sufficient because it sends `SIGTERM` by default.
+
+## Run CLI commands inside a container
+
+The standard image does not include a shell. Use `docker exec` or `kubectl exec` to invoke the `mcp-gateway` binary directly:
+
+<Tabs>
+  <Tab title="Docker">
+    ```bash
+    docker exec -it <container_name> /mcp-gateway
+    ```
+  </Tab>
+  <Tab title="Kubernetes">
+    ```bash
+    kubectl -n <namespace> exec -it po/<pod_name> -- /mcp-gateway
+    ```
+  </Tab>
+</Tabs>
+
+For example, to list registered MCP servers from inside a running container:
+
+```bash
+docker exec -it mcp-gateway-server /mcp-gateway list servers
+```

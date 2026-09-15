@@ -1,0 +1,118 @@
+---
+title: "Starting the server"
+description: "Starting and initializing the mcp-gateway server"
+---
+
+These commands operate on the MCP Gateway server process itself rather than on its registry contents. `start` launches the gateway, `init-server` prepares it for enterprise use, and `version` reports what is running.
+
+## `start`
+
+Starts the MCP Gateway HTTP server and MCP gateway.
+
+```bash
+mcp-gateway start [flags]
+```
+
+The server listens on all interfaces on port `8080` by default and exposes the MCP proxy at `/mcp`. On first run in development mode, it automatically initializes itself — no additional setup is needed.
+
+### Flags
+
+<ParamField body="--port" type="string">
+  TCP port to bind the HTTP server to. Overrides the `PORT` environment variable. Defaults to `8080`.
+</ParamField>
+
+<ParamField body="--host" type="string">
+  Host or network interface to bind the HTTP server to. Overrides the `MCP_GATEWAY_BIND_HOST` environment variable. Defaults to all interfaces. Use `127.0.0.1` for local-only access.
+</ParamField>
+
+<ParamField body="--sqlite-db-path" type="string">
+  Optional path to a custom SQLite database file to use when PostgreSQL is not configured. If not provided, MCP Gateway defaults to `./mcp-gateway.db`. Overrides the `SQLITE_DB_PATH` environment variable.
+</ParamField>
+
+<ParamField body="--enterprise" type="boolean" default="false">
+  Start the server in enterprise mode, which enables access control, authenticated clients, and user management. Equivalent to setting `SERVER_MODE=enterprise`. When using this flag on a fresh database, the server will print a reminder to run `init-server` before it can be used.
+</ParamField>
+
+### Environment variables
+
+The `start` command reads environment variables for server mode, database configuration, timeouts, and telemetry. A `.env` file in the working directory is loaded automatically if present.
+
+For the complete list, defaults, and `_FILE` variants, see [Environment variables](/reference/environment-variables).
+
+### Examples
+
+Start in development mode (default):
+
+```bash
+mcp-gateway start
+```
+
+Start on a custom port:
+
+```bash
+mcp-gateway start --port 9000
+```
+
+Start with local-only network access:
+
+```bash
+mcp-gateway start --host 127.0.0.1
+```
+
+Start with a custom SQLite file:
+
+```bash
+mcp-gateway start --sqlite-db-path /path/to/mcp-gateway.db
+```
+
+Start in enterprise mode:
+
+```bash
+mcp-gateway start --enterprise
+```
+
+Start with a Postgres database:
+
+```bash
+DATABASE_URL="postgres://user:password@localhost:5432/mcp-gateway" mcp-gateway start
+```
+
+---
+
+## `init-server`
+
+Initializes the MCP Gateway server when running in enterprise mode. Run it once, from your local machine, after the server has started.
+
+```bash
+mcp-gateway init-server [--registry <url>]
+```
+
+`init-server` creates the first admin user and stores the registry URL and token in `~/.mcp-gateway.conf`, authenticating your CLI as admin.
+
+For the full enterprise bootstrap flow, see [Enterprise operations](/reference/cli-enterprise) and [Access and governance overview](/governance/overview).
+
+### Example
+
+```bash
+mcp-gateway --registry http://your-server:8080 init-server
+```
+
+---
+
+## `version`
+
+Prints version information for both the CLI binary and the connected server.
+
+```bash
+mcp-gateway version
+```
+
+### Output
+
+```text
+CLI Version: v1.2.3
+Server Version: v1.2.3
+Server URL:  http://127.0.0.1:8080
+```
+
+If the server is unreachable (for example, when running the CLI without a local server), the server version line is replaced with a message indicating the version could not be retrieved.

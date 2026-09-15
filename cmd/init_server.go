@@ -1,0 +1,55 @@
+package cmd
+
+import (
+	"errors"
+	"fmt"
+
+	"github.com/spf13/cobra"
+	"github.com/zcray0326/mcp-gateway/cmd/config"
+)
+
+var initServerCmd = &cobra.Command{
+	Use:   "init-server",
+	Short: "Initialize the MCP Gateway Server (for Enterprise Mode only)",
+	Long: "If the MCP Gateway Server was started in Enterprise Mode, use this command to initialize the server.\n" +
+		"Initialization is required before you can use the server.\n",
+	RunE: runInitServer,
+	Annotations: map[string]string{
+		"group": string(subCommandGroupAdvanced),
+		"order": "6",
+	},
+}
+
+func init() {
+	rootCmd.AddCommand(initServerCmd)
+}
+
+func runInitServer(cmd *cobra.Command, args []string) error {
+	fmt.Println("Initializing the MCP Gateway Server in Enterprise Mode...")
+	resp, err := apiClient.InitServer()
+	if err != nil {
+		return fmt.Errorf("failed to initialize the server: %w", err)
+	}
+
+	if resp.AdminAccessToken == "" {
+		return errors.New("server initialization failed: no admin access token received")
+	}
+
+	// Create new client configuration
+	cfg := &config.ClientConfig{
+		RegistryURL: apiClient.BaseURL(),
+		AccessToken: resp.AdminAccessToken,
+	}
+	if err := config.Save(cfg); err != nil {
+		return fmt.Errorf("failed to create client configuration: %w", err)
+	}
+
+	cfgPath, err := config.AbsPath()
+	if err != nil {
+		return fmt.Errorf("failed to get client configuration path: %w", err)
+	}
+	fmt.Println("Your Admin access token has been saved to", cfgPath)
+
+	fmt.Println("All done!")
+	return nil
+}

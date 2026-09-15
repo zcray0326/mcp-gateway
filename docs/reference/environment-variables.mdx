@@ -1,0 +1,230 @@
+---
+title: "Environment variables"
+description: "Complete reference for every environment variable the mcp-gateway server and client read at startup."
+---
+
+## Database
+
+MCP Gateway supports SQLite (default) and PostgreSQL. Use either `DATABASE_URL` for a full DSN or the individual `POSTGRES_*` variables to build the DSN from parts.
+
+<ParamField path="DATABASE_URL" type="string">
+  Full PostgreSQL connection string. When set, MCP Gateway connects to PostgreSQL and ignores any `POSTGRES_*` variables.
+
+  ```bash
+  export DATABASE_URL=postgres://admin:root@localhost:5432/mcp_gateway_db
+  ```
+
+  When this variable is not set and `POSTGRES_HOST` is also not set, MCP Gateway falls back to an embedded SQLite database file (`mcp-gateway.db`) in the current working directory.
+</ParamField>
+
+<ParamField path="SQLITE_DB_PATH" type="string">
+  Optional path to the SQLite database file to use when `DATABASE_URL` and `POSTGRES_HOST` are not set. If this variable is not set, MCP Gateway defaults to `./mcp-gateway.db`. The `--sqlite-db-path` CLI flag takes precedence over this variable.
+
+  ```bash
+  export SQLITE_DB_PATH=./.mcp-gateway.db
+  mcp-gateway start
+  ```
+
+  When this variable is set, MCP Gateway uses that exact path instead of auto-detecting `mcp-gateway.db`.
+</ParamField>
+
+<ParamField path="POSTGRES_HOST" type="string">
+  PostgreSQL host. **Required** when using the individual `POSTGRES_*` variables instead of `DATABASE_URL`. If this variable is not set, MCP Gateway does not attempt to build a PostgreSQL DSN from the other `POSTGRES_*` variables.
+
+  ```bash
+  export POSTGRES_HOST=localhost
+  ```
+</ParamField>
+
+<ParamField path="POSTGRES_PORT" type="string" default="5432">
+  PostgreSQL port.
+
+  ```bash
+  export POSTGRES_PORT=5432
+  ```
+</ParamField>
+
+<ParamField path="POSTGRES_USER" type="string" default="postgres">
+  PostgreSQL username. If both `POSTGRES_USER` and `POSTGRES_USER_FILE` are set, `POSTGRES_USER` takes precedence.
+</ParamField>
+
+<ParamField path="POSTGRES_USER_FILE" type="string">
+  Path to a file containing the PostgreSQL username. Useful with Docker secrets. MCP Gateway reads the file and trims surrounding whitespace.
+
+  ```bash
+  export POSTGRES_USER_FILE=/run/secrets/pg_user
+  ```
+</ParamField>
+
+<ParamField path="POSTGRES_PASSWORD" type="string">
+  PostgreSQL password. If both `POSTGRES_PASSWORD` and `POSTGRES_PASSWORD_FILE` are set, `POSTGRES_PASSWORD` takes precedence. The password can be empty.
+</ParamField>
+
+<ParamField path="POSTGRES_PASSWORD_FILE" type="string">
+  Path to a file containing the PostgreSQL password.
+
+  ```bash
+  export POSTGRES_PASSWORD_FILE=/run/secrets/pg_password
+  ```
+</ParamField>
+
+<ParamField path="POSTGRES_DB" type="string" default="postgres">
+  PostgreSQL database name. If both `POSTGRES_DB` and `POSTGRES_DB_FILE` are set, `POSTGRES_DB` takes precedence.
+</ParamField>
+
+<ParamField path="POSTGRES_DB_FILE" type="string">
+  Path to a file containing the PostgreSQL database name.
+
+  ```bash
+  export POSTGRES_DB_FILE=/run/secrets/pg_db
+  ```
+</ParamField>
+
+### Database resolution order
+
+When the server starts it resolves the database connection in this order:
+
+1. `DATABASE_URL` — used as-is if set.
+2. `POSTGRES_HOST` + optional `POSTGRES_*` variables — MCP Gateway constructs a DSN if `POSTGRES_HOST` is set.
+3. `--sqlite-db-path` — uses the configured SQLite file path if the CLI flag is set.
+4. `SQLITE_DB_PATH` — uses the configured SQLite file path if the environment variable is set.
+5. SQLite fallback — creates or opens `mcp-gateway.db` in the current working directory, while still recognizing an existing legacy `mcp.db`.
+
+---
+
+## Server
+
+<ParamField path="MCP_GATEWAY_BIND_HOST" type="string">
+  Host or network interface the HTTP server binds to. The `--host` CLI flag takes precedence over this variable. If unset, MCP Gateway listens on all interfaces.
+
+  ```bash
+  export MCP_GATEWAY_BIND_HOST=127.0.0.1
+  mcp-gateway start
+  ```
+</ParamField>
+
+<ParamField path="PORT" type="string" default="8080">
+  TCP port the HTTP server listens on. The `--port` CLI flag takes precedence over this variable.
+
+  ```bash
+  export PORT=9090
+  mcp-gateway start
+  ```
+</ParamField>
+
+<ParamField path="SERVER_MODE" type="string" default="development">
+  Server operating mode. Accepted values are `development` and `enterprise` (case-insensitive). The `--enterprise` CLI flag takes precedence over this variable.
+
+  ```bash
+  export SERVER_MODE=enterprise
+  mcp-gateway start
+  ```
+
+  | Mode | Behaviour |
+  |---|---|
+  | `development` | No authentication enforced. All MCP clients have full access to all registered servers. Ideal for local use. |
+  | `enterprise` | Strict access control, user management, and observability features. Requires running `mcp-gateway init-server` after the first start. |
+
+  <Note>
+    The value `production` is accepted for backward compatibility but is deprecated. Use `enterprise` instead.
+  </Note>
+</ParamField>
+
+<ParamField path="MCP_SERVER_INIT_REQ_TIMEOUT_SEC" type="integer" default="30">
+  Maximum number of seconds MCP Gateway waits for a newly registered MCP server to respond to its initialization request before aborting. Must be a positive integer. Increase this value if you register STDIO servers that take a long time to start up.
+
+  ```bash
+  export MCP_SERVER_INIT_REQ_TIMEOUT_SEC=60
+  ```
+</ParamField>
+
+---
+
+## Observability
+
+<ParamField path="OTEL_ENABLED" type="boolean" default="false (development) / true (enterprise)">
+  Enables Prometheus-compatible OpenTelemetry metrics. When enabled, metrics are exposed at the `/metrics` HTTP endpoint. Accepted values are `true`, `1`, `false`, and `0` (case-insensitive).
+
+  In `enterprise` mode this defaults to `true`. In `development` mode it defaults to `false`. Setting this variable explicitly overrides the mode-based default.
+
+  ```bash
+  export OTEL_ENABLED=true
+  mcp-gateway start
+  ```
+</ParamField>
+
+<ParamField path="OTEL_RESOURCE_ATTRIBUTES" type="string">
+  Additional key-value attributes attached to all emitted OTel metrics. Use the standard `key=value,key2=value2` format defined by the [OpenTelemetry specification](https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/#general-sdk-configuration).
+
+  ```bash
+  export OTEL_RESOURCE_ATTRIBUTES=deployment.environment.name=enterprise
+  ```
+
+  These attributes are appended to the resource description alongside the automatically detected service name, host, and process attributes.
+</ParamField>
+
+---
+
+## Connections
+
+<ParamField path="SESSION_IDLE_TIMEOUT_SEC" type="integer" default="-1">
+  Idle timeout in seconds for stateful MCP sessions. A stateful session is kept open between tool calls to avoid cold-start overhead (see [Session modes](/guides/session-modes)).
+
+  | Value | Behaviour |
+  |---|---|
+  | `-1` (default) | No timeout. Sessions live until the server stops or the server is deregistered. |
+  | `0` | No timeout (equivalent to `-1`). Sessions run until server shutdown. |
+  | `> 0` | Sessions are closed after this many seconds of inactivity. |
+
+  ```bash
+  export SESSION_IDLE_TIMEOUT_SEC=300
+  ```
+
+  <Note>
+    This setting has no effect on stateless connections, which are the default and are closed immediately after each tool call.
+  </Note>
+</ParamField>
+
+---
+
+## Docker
+
+<ParamField path="MCP_GATEWAY_IMAGE_TAG" type="string">
+  Docker image tag used when pulling `ghcr.io/zcray0326/mcp-gateway` in the provided Docker Compose files.
+
+  Set this when you want to lock your mcp-gateway deployment to a specific version when using one of the provided docker compose files.
+
+  ```bash
+  MCP_GATEWAY_IMAGE_TAG=0.4.0-stdio docker compose up -d
+  ```
+
+  | Tag | Description |
+  |---|---|
+  | `latest` | Minimal image — MCP Gateway binary only. Recommended for production. Default in `docker-compose.prod.yaml`. |
+  | `latest-stdio` | Includes `node`, `npx`, and `uvx`. Required if you register STDIO servers that rely on those runtimes. Default in `docker-compose.yaml` |
+</ParamField>
+
+---
+
+## Quick reference
+
+| Variable | Category | Default | Description |
+|---|---|---|---|
+| `DATABASE_URL` | Database | — | Full PostgreSQL DSN. |
+| `SQLITE_DB_PATH` | Database | — | SQLite database path used when PostgreSQL is not configured. |
+| `POSTGRES_HOST` | Database | — | PostgreSQL host. Required to enable `POSTGRES_*` variables. |
+| `POSTGRES_PORT` | Database | `5432` | PostgreSQL port. |
+| `POSTGRES_USER` | Database | `postgres` | PostgreSQL username. |
+| `POSTGRES_USER_FILE` | Database | — | File path for PostgreSQL username. |
+| `POSTGRES_PASSWORD` | Database | _(empty)_ | PostgreSQL password. |
+| `POSTGRES_PASSWORD_FILE` | Database | — | File path for PostgreSQL password. |
+| `POSTGRES_DB` | Database | `postgres` | PostgreSQL database name. |
+| `POSTGRES_DB_FILE` | Database | — | File path for PostgreSQL database name. |
+| `MCP_GATEWAY_BIND_HOST` | Server | all interfaces | HTTP listen host or network interface. |
+| `PORT` | Server | `8080` | HTTP listen port. |
+| `SERVER_MODE` | Server | `development` | Server mode: `development` or `enterprise`. |
+| `MCP_SERVER_INIT_REQ_TIMEOUT_SEC` | Server | `30` | Seconds to wait for MCP server initialization. |
+| `OTEL_ENABLED` | Observability | mode-dependent | Enable OpenTelemetry metrics. |
+| `OTEL_RESOURCE_ATTRIBUTES` | Observability | — | Additional OTel resource attributes. |
+| `SESSION_IDLE_TIMEOUT_SEC` | Connections | `-1` | Idle timeout for stateful sessions. |
+| `MCP_GATEWAY_IMAGE_TAG` | Docker | `latest` | Docker image tag for Compose deployments. |

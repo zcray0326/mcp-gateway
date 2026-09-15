@@ -1,0 +1,351 @@
+---
+title: "Managing MCPs"
+description: "Reference for registering servers, listing tools, prompts and resources, invoking tools, and controlling what the gateway exposes."
+---
+
+This page covers the day-to-day CLI commands used after the server is running: registering upstream MCP servers, inspecting what they expose, invoking tools, reading prompts and resources, and controlling visibility.
+
+Use the dedicated guides for deeper workflows:
+
+- [Register a streamable HTTP MCP server](/guides/register-http-servers)
+- [Register a stdio MCP server](/guides/register-stdio-servers)
+- [Manage tools and prompts](/guides/tools-and-prompts)
+- [Manage resources](/guides/manage-resources)
+
+<Note>
+  Treat `mcp-gateway <command> --help` as the authoritative source for the currently supported flags. This page keeps the higher-value workflows and examples.
+</Note>
+
+## `register`
+
+Registers an upstream MCP server in mcp-gateway. Once registration succeeds, the server's tools, prompts, and resources become available through the gateway.
+
+```bash
+mcp-gateway register [flags]
+```
+
+For streamable HTTP servers, you can use flags directly:
+
+```bash
+mcp-gateway register --name context7 --url https://mcp.context7.com/mcp
+```
+
+You can also pass a static bearer token for upstream authentication:
+
+```bash
+mcp-gateway register --name github --url https://api.githubcopilot.com/mcp \
+  --bearer-token ghp_your_token_here
+```
+
+For `stdio` and `sse` servers, use a JSON config file:
+
+```bash
+mcp-gateway register --conf ./filesystem.json
+```
+
+### Common flags
+
+<ParamField body="--name" type="string">
+  Unique server name. Required when not using `--conf`.
+</ParamField>
+
+<ParamField body="--url" type="string">
+  URL of a streamable HTTP MCP server. Required when registering an HTTP server without `--conf`.
+</ParamField>
+
+<ParamField body="--description" type="string">
+  Optional human-readable description.
+</ParamField>
+
+<ParamField body="--bearer-token" type="string">
+  Static bearer token forwarded to the upstream HTTP server.
+</ParamField>
+
+<ParamField body="--force" type="boolean" default="false">
+  Deregister an existing server with the same name, then register the new one.
+</ParamField>
+
+<ParamField body="-c / --conf" type="string">
+  Path to a JSON config file. Required for `stdio` and `sse` servers.
+</ParamField>
+
+### Minimal config examples
+
+Streamable HTTP:
+
+```json
+{
+  "name": "calculator",
+  "transport": "streamable_http",
+  "description": "Basic math tools",
+  "url": "http://127.0.0.1:8000/mcp",
+  "session_mode": "stateless"
+}
+```
+
+STDIO:
+
+```json
+{
+  "name": "filesystem",
+  "transport": "stdio",
+  "command": "npx",
+  "args": ["-y", "@modelcontextprotocol/server-filesystem", "."],
+  "session_mode": "stateful"
+}
+```
+
+For the full config fields, `session_mode`, environment-variable placeholders, and transport-specific notes, use:
+
+- [Register a streamable HTTP MCP server](/guides/register-http-servers)
+- [Register a stdio MCP server](/guides/register-stdio-servers)
+- [Config file reference](/reference/config-file)
+
+<Note>
+  Server names must be unique across mcp-gateway and must not contain whitespace, special characters, or consecutive underscores (`__`).
+</Note>
+
+## `deregister`
+
+Removes a registered MCP server and all of its tools, prompts, and resources from the gateway.
+
+```bash
+mcp-gateway deregister <server-name>
+```
+
+Example:
+
+```bash
+mcp-gateway deregister context7
+```
+
+<Warning>
+  Deregistering a server removes its tools, prompts, and resources immediately. Any connected MCP client relying on them will start failing.
+</Warning>
+
+## `list`
+
+Lists the entities currently registered in mcp-gateway.
+
+```bash
+mcp-gateway list <subcommand> [flags]
+```
+
+### `list servers`
+
+Lists registered MCP servers and their transport details.
+
+```bash
+mcp-gateway list servers
+```
+
+### `list tools`
+
+Lists tools across the gateway, or filters them by server or tool group.
+
+```bash
+mcp-gateway list tools [--server <name>]
+mcp-gateway list tools [--group <name>]
+```
+
+<ParamField body="--server" type="string">
+  Filter tools to a specific registered server.
+</ParamField>
+
+<ParamField body="--group" type="string">
+  Filter tools to those currently active in a tool group.
+</ParamField>
+
+<Note>
+  `--server` and `--group` cannot be combined. `list tools --group` only shows tools that are currently active. Use `get group` to inspect the full configured group definition.
+</Note>
+
+### `list prompts`
+
+Lists prompts across all servers or from one server.
+
+```bash
+mcp-gateway list prompts
+mcp-gateway list prompts --server github
+```
+
+### `list resources`
+
+Lists resources across all servers or from one server.
+
+```bash
+mcp-gateway list resources
+mcp-gateway list resources --server mintlify-mcpjungle
+```
+
+### `list groups`
+
+Lists tool groups.
+
+```bash
+mcp-gateway list groups
+```
+
+### Common examples
+
+```bash
+# List all tools
+mcp-gateway list tools
+
+# List tools from one server
+mcp-gateway list tools --server github
+
+# List tools currently active in a group
+mcp-gateway list tools --group engineering-tools
+
+# List prompts from one server
+mcp-gateway list prompts --server github
+
+# List resources from one server
+mcp-gateway list resources --server mintlify-mcpjungle
+```
+
+## `usage`
+
+Shows the input schema for a tool before you invoke it.
+
+```bash
+mcp-gateway usage <tool-name>
+```
+
+Example:
+
+```bash
+mcp-gateway usage github__create_issue
+```
+
+The output includes the tool description, argument types, required fields, and any JSON-schema constraints exposed by the upstream MCP server.
+
+## `invoke`
+
+Calls a tool directly through mcp-gateway.
+
+```bash
+mcp-gateway invoke <tool-name> [flags]
+```
+
+### Flags
+
+<ParamField body="--input" type="string" default="{}">
+  JSON object of input arguments passed to the tool.
+</ParamField>
+
+<ParamField body="--group" type="string">
+  Invoke the tool within a tool group's context. The tool must be available in that group.
+</ParamField>
+
+### Examples
+
+```bash
+# Invoke a tool with no input
+mcp-gateway invoke github__list_repos
+
+# Invoke a tool with JSON input
+mcp-gateway invoke github__create_issue \
+  --input '{"owner": "myorg", "repo": "myrepo", "title": "Bug report"}'
+
+# Invoke within a tool group
+mcp-gateway invoke github__create_issue \
+  --input '{"owner": "myorg", "repo": "myrepo", "title": "Bug"}' \
+  --group engineering-tools
+```
+
+Text responses are printed to stdout. If the response contains images, audio, or binary resources, the CLI may save files in the current working directory.
+
+## `enable`
+
+Enables tools, prompts, or an entire server globally.
+
+```bash
+mcp-gateway enable <subcommand> <name>
+```
+
+Supported forms:
+
+- `mcp-gateway enable tool <name>`
+- `mcp-gateway enable prompt <name>`
+- `mcp-gateway enable server <name>`
+
+Examples:
+
+```bash
+mcp-gateway enable tool github__create_issue
+mcp-gateway enable tool github
+mcp-gateway enable prompt github
+mcp-gateway enable server github
+```
+
+<Note>
+  The legacy form `mcp-gateway enable <name>` still works for backward compatibility, but `enable tool <name>` or `enable server <name>` is preferred.
+</Note>
+
+## `disable`
+
+Disables tools, prompts, or an entire server globally.
+
+```bash
+mcp-gateway disable <subcommand> <name>
+```
+
+Supported forms:
+
+- `mcp-gateway disable tool <name>`
+- `mcp-gateway disable prompt <name>`
+- `mcp-gateway disable server <name>`
+
+Examples:
+
+```bash
+mcp-gateway disable tool github__delete_repo
+mcp-gateway disable tool github
+mcp-gateway disable prompt github
+mcp-gateway disable server github
+```
+
+<Note>
+  The legacy form `mcp-gateway disable <name>` still works for backward compatibility, but only maps to tool disabling behavior.
+</Note>
+
+## `get prompt`
+
+Retrieves a prompt template and optionally renders it with arguments.
+
+```bash
+mcp-gateway get prompt <prompt-name> [--arg key=value ...]
+```
+
+Example:
+
+```bash
+mcp-gateway get prompt github__code-review \
+  --arg code="def hello(): print('world')" \
+  --arg language="python"
+```
+
+The output shows the generated structured messages returned by the upstream MCP server.
+
+## `get resource`
+
+Retrieves resource metadata, or reads the resource contents.
+
+```bash
+mcp-gateway get resource <uri>
+mcp-gateway get resource --read <uri>
+```
+
+Examples:
+
+```bash
+# View metadata
+mcp-gateway get resource mcpj://res/mintlify-mcpjungle/bWludGxpZnk6Ly9za2lsbHMvbWNwanVuZ2xl
+
+# Read the contents
+mcp-gateway get resource --read mcpj://res/mintlify-mcpjungle/bWludGxpZnk6Ly9za2lsbHMvbWNwanVuZ2xl
+```
+
+With `--read`, text content is printed inline. Blob content may be decoded and written to a file in the current working directory.

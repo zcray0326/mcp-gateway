@@ -1,0 +1,183 @@
+---
+title: "Tool Groups"
+description: "Expose only a subset of all tools to clients over dedicated MCP endpoints."
+---
+
+As more MCP servers are added to mcp-gateway, the number of tools, prompts and resources available through the gateway mcp endpoint can quickly explode.
+
+This can cause context overload for your clients.
+
+MCP Gateway allows you to create custom MCP endpoints that only expose cherry-picked tools to clients. These are called **Tool Groups**.
+
+Your client can then connect to the specific group endpoint instead of the main `/mcp` gateway and only see tools you want to expose to it.
+
+## How tool groups work
+
+When you create a group, MCP Gateway registers a new streamable HTTP endpoint at:
+
+```
+/v0/groups/{group-name}/mcp
+```
+
+Point your MCP client at that URL instead of the main gateway. The client will only discover and call the tools included in that group.
+
+MCP Gateway also creates SSE endpoints for the group:
+
+```text
+/v0/groups/{group-name}/sse
+/v0/groups/{group-name}/message
+```
+
+<Warning>
+  SSE is a deprecated MCP transport and its support in MCP Gateway is limited. Prefer the streamable HTTP endpoint unless you specifically need SSE compatibility.
+</Warning>
+
+<Note>
+  If a tool included in a group is later disabled globally or deregistered, it becomes unavailable through the group endpoint automatically. Re-enabling or re-registering the tool makes it available again without any changes to the group configuration.
+</Note>
+
+## Configuration file format
+
+You define a group in a JSON file and pass it to the `create group` command. Three fields control which tools are included:
+
+| Field | Type | Description |
+|---|---|---|
+| `name` | string | Unique name for the group (required). |
+| `description` | string | Human-readable description (optional). |
+| `included_tools` | string[] | Canonical tool names to include individually. |
+| `included_servers` | string[] | Include all tools from these MCP servers. |
+| `excluded_tools` | string[] | Remove specific tools from the resolved set (applied last). |
+
+<Warning>
+  Exclusion is always applied after inclusion. If a tool appears in both `included_tools` and `excluded_tools`, it will be excluded from the final group.
+</Warning>
+
+## Configuration approaches
+
+<Tabs>
+  <Tab title="Cherry-pick specific tools">
+    Use `included_tools` to handpick exactly which tools to expose. Tool names follow the canonical format `<server-name>__<tool-name>`.
+
+    ```json claude-tools-group.json
+    {
+      "name": "claude-tools",
+      "description": "This group only contains tools for Claude Desktop to use",
+      "included_tools": [
+        "filesystem__read_file",
+        "deepwiki__read_wiki_contents",
+        "time__get_current_time"
+      ]
+    }
+    ```
+
+    This group exposes exactly three tools regardless of how many tools are registered in MCP Gateway.
+
+    <Tip>
+      Run `mcp-gateway list tools` to see all available tool names before building your group configuration.
+    </Tip>
+  </Tab>
+  <Tab title="Include entire servers">
+    Use `included_servers` to pull in all tools from one or more servers. Combine with `excluded_tools` to remove specific tools you don't want to expose.
+
+    ```json claude-tools-group.json
+    {
+      "name": "claude-tools",
+      "description": "All tools from time and deepwiki servers except time__convert_time",
+      "included_servers": ["time", "deepwiki"],
+      "excluded_tools": ["time__convert_time"]
+    }
+    ```
+
+    This includes every tool from the `time` and `deepwiki` servers, then removes `time__convert_time` from the result.
+  </Tab>
+  <Tab title="Mix both approaches">
+    Combine `included_tools`, `included_servers`, and `excluded_tools` for maximum flexibility.
+
+    ```json comprehensive-tools-group.json
+    {
+      "name": "comprehensive-tools",
+      "description": "Mix of manual tools, server inclusion, and exclusions",
+      "included_tools": ["filesystem__read_file"],
+      "included_servers": ["time"],
+      "excluded_tools": ["time__convert_time"]
+    }
+    ```
+
+    This adds `filesystem__read_file` explicitly, then includes all tools from the `time` server, then removes `time__convert_time`. Exclusion runs last regardless of the order fields appear in the file.
+  </Tab>
+</Tabs>
+
+## Creating a group
+
+Pass the configuration file to the `create group` command using the `-c` flag:
+
+```bash
+mcp-gateway create group -c ./claude-tools-group.json
+```
+
+MCP Gateway confirms the group was created and prints its endpoint:
+
+```
+Tool Group claude-tools created successfully
+It is now accessible at the following streamable http endpoint:
+
+    http://127.0.0.1:8080/v0/groups/claude-tools/mcp
+
+SSE endpoints are also available:
+
+    http://127.0.0.1:8080/v0/groups/claude-tools/sse
+    http://127.0.0.1:8080/v0/groups/claude-tools/message
+```
+
+Configure your MCP client to connect to that URL instead of `http://127.0.0.1:8080/mcp`. The client will only see the tools in the group.
+
+This is the recommended pattern whenever a single client should use a curated tool set rather than the whole gateway.
+
+## Managing groups
+
+<Steps>
+  <Step title="List all groups">
+    ```bash
+    mcp-gateway list groups
+    ```
+  </Step>
+  <Step title="Inspect a specific group">
+    ```bash
+    mcp-gateway get group claude-tools
+    ```
+
+    This shows the group's description, its MCP endpoint URLs, and the lists of included tools, included servers, and excluded tools.
+  </Step>
+  <Step title="Delete a group">
+    ```bash
+    mcp-gateway delete group claude-tools
+    ```
+
+    Deleting a group removes its endpoint. Make sure no MCP clients are connected to that endpoint before you delete it. The tools themselves are not deleted — only the group configuration.
+  </Step>
+</Steps>
+
+## Working with tools inside a group
+
+Use the `--group` flag on `list tools` and `invoke` to scope operations to a specific group:
+
+```bash
+# List tools visible in the group
+mcp-gateway list tools --group claude-tools
+
+# Invoke a tool through the group context
+mcp-gateway invoke filesystem__read_file --group claude-tools --input '{"path": "README.md"}'
+```
+
+These commands are useful for verifying that a group is configured correctly before pointing a client at it.
+
+## Known limitations
+
+<AccordionGroup>
+  <Accordion title="Prompts & Resources are currently not supported in Tool Groups">
+    [MCP Prompts](https://modelcontextprotocol.io/specification/2025-06-18/server/prompts) and Resources are not currently available through group endpoints. Clients connected to a group endpoint cannot discover or invoke prompts. This is a known issue tracked in [upstream MCPJungle#136](https://github.com/mcpjungle/MCPJungle/issues/136).
+  </Accordion>
+  <Accordion title="Enterprise mode: only admins can create groups">
+    When MCP Gateway runs in `enterprise` mode, only an admin account can create Tool Groups. Standard users do not have permission to create groups. Support for user-scoped groups is planned for a future release.
+  </Accordion>
+</AccordionGroup>

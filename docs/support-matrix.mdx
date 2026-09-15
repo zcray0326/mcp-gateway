@@ -1,0 +1,85 @@
+---
+title: "Supported features"
+description: "Capability overview for MCP Gateway, including what is stable today, what is still beta, and where support is currently limited."
+---
+
+This page summarizes the current support level across the major MCP Gateway capability areas.
+
+Use it as a quick product-readiness view:
+
+- **Stable**: supported and appropriate for normal use
+- **Beta**: usable, but still maturing
+- **Limited**: supported only partially or with important constraints
+
+## Transports
+
+| Area | Capability | Support level | Notes                                                                                                                                              |
+|---|---|---|----------------------------------------------------------------------------------------------------------------------------------------------------|
+| Upstream MCP servers | Streamable HTTP | Stable | Primary remote transport for registering MCP servers in MCP Gateway.                                                                                 |
+| Upstream MCP servers | STDIO | Stable | Supported through config-file registration and local child-process execution.                                                                      |
+| Upstream MCP servers | SSE | Limited | SSE is supported but no longer recommended as it is a deprecated transport.                                                                       |
+| Client connection to MCP Gateway | Streamable HTTP endpoint | Stable | Main gateway endpoint exposed at `/mcp`.                                                                                                           |
+
+## MCP surface area
+
+| Area                    | Capability | Support level | Notes                                                                                                                        |
+|-------------------------|---|---|------------------------------------------------------------------------------------------------------------------------------|
+| MCP entities            | Tools | Stable | Core MCP Gateway workflow. Tools can be listed, invoked, enabled, disabled, and grouped.                                       |
+| MCP entities            | Prompts | Stable | Prompts are supported and can be listed, retrieved, enabled, and disabled.                                                   |
+| MCP entities            | Resources | Beta | Some features such as tool groups may not fully support Resources yet.                                                        |
+| Group endpoints         | Tool Groups | Stable | Main mechanism for exposing curated subsets of tools to specific clients.                                                    |
+
+## Authentication and access control
+
+| Area | Capability | Support level | Notes                                                           |
+|---|---|---|-----------------------------------------------------------------|
+| Upstream HTTP servers | Static bearer-token auth | Stable | Supported via `--bearer-token` or JSON config.                  |
+| Upstream HTTP servers | Custom headers | Stable | Supported through the `headers` field in config files.          |
+| Upstream HTTP servers | OAuth flow | Beta | Supported for registration-time OAuth on HTTP-based upstream MCP servers. Tokens are gateway-scoped and the feature is still maturing. |
+| MCP Gateway gateway | Enterprise-mode client authentication | Stable | MCP clients authenticate with bearer tokens in enterprise mode. |
+| MCP Gateway gateway | Per-client server allow-lists | Stable | Supported through MCP client creation in enterprise mode.       |
+| MCP Gateway gateway | User accounts | Stable | Supported for human operators in enterprise mode.               |
+
+## Deployment and runtime
+
+| Area | Capability | Support level | Notes |
+|---|---|---|---|
+| Local deployment | Development mode | Stable | Intended for individuals using MCP Gateway locally. |
+| Shared deployment | Enterprise mode | Stable | Intended for teams and shared infrastructure. |
+| Distribution | Runtime platforms | Stable | Source builds support the platforms covered by Go and the dashboard toolchain. Release binaries and container images depend on this repository's release workflow. |
+| Database | SQLite | Stable | Good default for local testing and single-user workflows. |
+| Database | PostgreSQL | Stable | Recommended for serious and shared deployments. |
+| Session lifecycle | Stateless sessions | Stable | Default and preferred mode. |
+| Session lifecycle | Stateful sessions | Stable | Supported for cold-start-sensitive or sessionful upstream servers. |
+
+## Observability and operations
+
+| Area | Capability | Support level | Notes                                                                                         |
+|---|---|---|-----------------------------------------------------------------------------------------------|
+| Metrics | Prometheus-compatible OpenTelemetry metrics | Stable | Enabled by default in enterprise mode and available at `/metrics`.                            |
+| Metrics | OTLP export | Not supported | MCP Gateway does not currently export metrics through OTLP.                                      |
+| Audit Logs | Detailed audit logs for mcp interactions | Limited | This will be improved in future.                    |
+
+## Clients
+
+| Area | Capability | Support level | Notes |
+|---|---|---|---|
+| MCP Gateway client | CLI | Stable | Primary management interface for registering servers, managing groups, and operating MCP Gateway today. |
+| MCP Gateway client | Dashboard UI | Beta | Local/dev web UI for inspecting and managing servers, tools, tool groups, prompts, resources, and system info. |
+
+## Related pages
+
+<CardGroup cols={2}>
+  <Card title="Core concepts" icon="diagram-project" href="/core-concepts">
+    Understand the MCP Gateway operating model behind the matrix.
+  </Card>
+  <Card title="Limitations" icon="triangle-exclamation" href="/limitations">
+    Review the current gaps and constraints in more detail.
+  </Card>
+  <Card title="Governance overview" icon="lock" href="/governance/overview">
+    Understand the enterprise operating model for shared deployments.
+  </Card>
+  <Card title="Reference" icon="terminal" href="/reference/cli-overview">
+    Dive into exact commands, config files, and environment variables.
+  </Card>
+</CardGroup>

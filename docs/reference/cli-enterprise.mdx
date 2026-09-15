@@ -1,0 +1,221 @@
+---
+title: "Enterprise operations"
+description: "Reference for enterprise-mode CLI commands: initialization, login, MCP clients, users, and token rotation."
+---
+
+Enterprise mode adds authentication and access control to mcp-gateway. These commands are used to bootstrap an enterprise deployment and manage who or what can connect to it.
+
+Use the governance guides for the full operational model:
+
+- [Access control](/governance/access-control)
+- [Manage clients and users](/governance/clients-and-users)
+- [Config file reference](/reference/config-file)
+
+<Info>
+  Commands on this page require the server to be running in enterprise mode with `mcp-gateway start --enterprise`.
+</Info>
+
+<Note>
+  Treat `mcp-gateway <command> --help` as the authoritative source for current flags. This page keeps the important setup flow, examples, and config patterns.
+</Note>
+
+## `init-server`
+
+Initializes a fresh enterprise server.
+
+```bash
+mcp-gateway --registry http://your-server:8080 init-server
+```
+
+Run this once against a new enterprise deployment. It creates the first admin user, generates the admin access token, and stores the server URL and token in `~/.mcp-gateway.conf`.
+
+<Warning>
+  This is a one-time bootstrap step. Store the generated admin credentials securely.
+</Warning>
+
+## `login`
+
+Stores an existing access token in `~/.mcp-gateway.conf` so the CLI can authenticate future requests.
+
+```bash
+mcp-gateway login <access-token>
+```
+
+Example:
+
+```bash
+mcp-gateway login eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+This is what regular users run after an administrator creates their account and shares a token with them.
+
+## `create mcp-client`
+
+Creates an authenticated MCP client identity.
+
+```bash
+mcp-gateway create mcp-client <name> [flags]
+mcp-gateway create mcp-client --conf <file>
+```
+
+Common flags:
+
+<ParamField body="--allow" type="string">
+  Comma-separated allow list of MCP server names. Example: `--allow "github,jira"`.
+</ParamField>
+
+<ParamField body="--access-token" type="string">
+  Custom token for the client. If omitted, the server generates one and prints it once.
+</ParamField>
+
+<ParamField body="-c / --conf" type="string">
+  Path to a JSON config file. When provided, the CLI ignores the other flags.
+</ParamField>
+
+Examples:
+
+```bash
+# Let mcp-gateway generate the token
+mcp-gateway create mcp-client claude-desktop --allow "github,jira"
+
+# Supply your own token
+mcp-gateway create mcp-client my-agent \
+  --allow "github" \
+  --access-token my-custom-token
+```
+
+Config file example:
+
+```json
+{
+  "name": "claude-desktop",
+  "description": "Claude Desktop on Alice's machine",
+  "allowed_servers": ["github", "jira"],
+  "access_token_ref": {
+    "env": "CLAUDE_CLIENT_TOKEN"
+  }
+}
+```
+
+You can also load the token from a file:
+
+```json
+{
+  "name": "claude-desktop",
+  "allowed_servers": ["github", "jira"],
+  "access_token_ref": {
+    "file": "/run/secrets/claude-token"
+  }
+}
+```
+
+<Note>
+  When creating a client from `--conf`, you must provide a custom token via `access_token` or `access_token_ref`.
+</Note>
+
+<Tip>
+  `--allow "*"` gives the client access to all registered MCP servers, including future ones. This is convenient for testing and strongly discouraged in production.
+</Tip>
+
+For token supply options and placeholder handling, see [Config file reference](/reference/config-file).
+
+## `delete mcp-client`
+
+Deletes an MCP client and immediately revokes its access to the mcp gateway.
+
+```bash
+mcp-gateway delete mcp-client <name>
+```
+
+Example:
+
+```bash
+mcp-gateway delete mcp-client claude-desktop
+```
+
+## `create user`
+
+Creates a standard user account for a human operator.
+
+```bash
+mcp-gateway create user <username> [flags]
+mcp-gateway create user --conf <file>
+```
+
+Examples:
+
+```bash
+# Let mcp-gateway generate the token
+mcp-gateway create user alice
+
+# Supply your own token
+mcp-gateway create user alice --access-token alice-custom-token
+```
+
+Config file example:
+
+```json
+{
+  "name": "alice",
+  "access_token_ref": {
+    "env": "ALICE_ACCESS_TOKEN"
+  }
+}
+```
+
+When user creation succeeds, the CLI prints the `mcp-gateway login <token>` command that the user should run locally.
+
+<Note>
+  When creating a user from `--conf`, you must provide a custom token via `access_token` or `access_token_ref`.
+</Note>
+
+For token supply options and placeholder handling, see [Config file reference](/reference/config-file).
+
+## `delete user`
+
+Deletes a user and revokes their access to mcp-gateway immediately.
+
+```bash
+mcp-gateway delete user <username>
+```
+
+Example:
+
+```bash
+mcp-gateway delete user alice
+```
+
+## Typical setup flow
+
+<Steps>
+  <Step title="Start the server in enterprise mode">
+    ```bash
+    mcp-gateway start --enterprise
+    ```
+  </Step>
+
+  <Step title="Initialize the server once">
+    ```bash
+    mcp-gateway --registry http://your-server:8080 init-server
+    ```
+  </Step>
+
+  <Step title="Register upstream MCP servers">
+    ```bash
+    mcp-gateway register --name github --url https://api.githubcopilot.com/mcp \
+      --bearer-token ghp_your_token
+    ```
+  </Step>
+
+  <Step title="Create MCP clients for agents and apps">
+    ```bash
+    mcp-gateway create mcp-client claude-desktop --allow "github"
+    ```
+  </Step>
+
+  <Step title="Create user accounts for operators">
+    ```bash
+    mcp-gateway create user alice
+    ```
+  </Step>
+</Steps>

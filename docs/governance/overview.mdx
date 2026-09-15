@@ -1,0 +1,94 @@
+---
+title: "Access and governance overview"
+description: "Understand MCP Gateway's enterprise operating model: authenticated clients, per-client server access, user accounts, and governance for shared deployments."
+---
+
+If you're an individual user running mpcjungle locally or for personal use (most likely in development mode), you can skip this section entirely.
+
+The Governance model is useful for organizations running mcp-gateway in a shared environment in the **enterprise mode**.
+
+In enterprise mode, organizations want:
+
+- Authenticated access to MCPs
+- MCP clients must be created explicitly
+- Each client's access to MCPs is controlled through allow-lists
+- Human users are separated from machine identities
+
+## Development mode versus enterprise mode
+
+| Capability | Development mode | Enterprise mode                   |
+|---|---|-----------------------------------|
+| Gateway authentication | Disabled | Required                          |
+| MCP client access control | Open access to registered servers | Explicit allow-list per client    |
+| User accounts | Not needed | Supported                         |
+| OpenTelemetry metrics | Disabled by default | Enabled by default                |
+| Server initialization | Automatic | Manual initialization by an Administrator   |
+
+## Governance model
+
+MCP Gateway uses three main identity and access concepts in enterprise mode.
+
+### Administrator
+
+Admin initializes the server, register MCP servers, creates mcp clients, creates users, and manages platform configuration.
+
+### MCP clients
+
+MCP clients are machine identities for your AI clients (agents, CLIs like claude code, IDEs like Cursor, or custom mcp clients).
+
+Each client gets:
+
+- an access token
+- an allow-list of upstream MCP servers it may access
+
+### Users
+
+Users are human identities for people who need authenticated access to MCP Gateway. They have a narrower permission set than admins.
+
+## Typical enterprise flow
+
+<Steps>
+  <Step title="Start MCP Gateway in enterprise mode">
+    Deploy the gateway in enterprise mode and connect it to PostgreSQL.
+  </Step>
+  <Step title="Initialize the server">
+    Run `mcp-gateway init-server` once to create the initial admin identity.
+  </Step>
+  <Step title="Register MCP servers">
+    Add the upstream servers you want the gateway to expose.
+  </Step>
+  <Step title="Create MCP clients">
+    Create one machine identity per client or workflow and grant access only to the servers that client should reach.
+  </Step>
+  <Step title="Create users when needed">
+    Create standard users for human operators who need authenticated visibility into MCP Gateway.
+  </Step>
+</Steps>
+
+## Why this matters
+
+For a shared deployment, a serious product needs more than just a gateway endpoint. It needs a control boundary:
+
+- which client can reach which server
+- which humans can operate the system
+- how tokens are issued and rotated
+- how usage can be observed centrally
+
+That is what enterprise mode is for.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Upstream authentication" icon="key" href="/governance/upstream-authentication">
+    Configure bearer tokens and custom headers for MCP Gateway's upstream server connections.
+  </Card>
+  <Card title="Access control" icon="shield-halved" href="/governance/access-control">
+    Create MCP clients and define exactly which servers they can access.
+  </Card>
+  <Card title="Clients and users" icon="users" href="/governance/clients-and-users">
+    Manage machine identities and human accounts cleanly.
+  </Card>
+  <Card title="Production deployment" icon="cloud" href="/deployment/production">
+    Run MCP Gateway with the expected enterprise operating model.
+  </Card>
+</CardGroup>

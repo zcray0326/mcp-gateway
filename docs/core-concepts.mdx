@@ -1,0 +1,179 @@
+---
+title: "Core concepts"
+description: "Understand the core concepts in mcp-gateway to get the most out of it"
+---
+
+## MCP Gateway server
+The long-running HTTP service that you run either locally or deploy to a remote host machine.
+
+It exposes a REST API for managing mcp-gateway registry itself and a streamable HTTP endpoint at `/mcp` for AI clients to connect to.
+
+### Data persistence
+MCP Gateway stores all its data in a SQL database.
+
+By default, it uses SQLite with a local file. For production deployments, we recommend PostgreSQL.
+
+If you use the docker-compose.yaml provided in the repository, it will automatically start a PostgreSQL container and ensure connectivity.
+
+## MCP Gateway client
+The `mcp-gateway` CLI tool you run from your terminal for server management and automation.
+
+Today, the CLI remains the most complete management client, and MCP Gateway also includes a Dashboard UI for local/dev visibility and common management tasks.
+
+You can also build your own clients that talk to the server's REST API for custom management interfaces or automation.
+
+## Upstream MCP server
+
+An **upstream MCP server** is any MCP server you add in MCP Gateway.
+
+This mcp server then becomes accessible to AI clients that connect to MCP Gateway's gateway endpoint.
+
+## Canonical names
+
+### Tools and Prompts
+MCP Gateway assigns canonical names to tools and prompts so they remain unique across all registered servers.
+
+Tool format:
+
+```text
+<server-name>__<tool-name>
+```
+
+Prompt format:
+
+```text
+<server-name>__<prompt-name>
+```
+
+Examples:
+
+```text
+context7__get-library-docs
+filesystem__read_file
+huggingface__Model Details
+```
+
+So if 2 mcp servers - `foo` and `bar` - expose a tool called `get_file`, mcp-gateway will expose them as `foo__get_file` and `bar__get_file` respectively.
+
+AI clients can discover and use these names.
+
+### Resources
+Each resource in mcp-gateway is assigned a new, unique URI which follows the below format:
+
+```text
+mcpj://res/<server-name>/<base64encode(original-resource-uri)>
+```
+
+eg-
+```text
+mcpj://res/foo_mcp/ZmlsZTovL3NhbXBsZS50eHQ
+```
+
+AI clients can discover and use these URIs to access mcp Resources.
+
+## Groups
+By default, mcp-gateway exposes all registered mcp servers (their tools, prompts and resources) at the main gateway endpoint `/mcp`.
+
+As you add more mcp servers, this can cause serious context overload for clients.
+
+Groups let you expose cherry-picked tools, prompts, and resources from registered servers at a separate MCP endpoint.
+
+Your client can then connect to the group's endpoint to discover and use only those tools relevant to it.
+
+A group's mcp is exposed at an endpoint of the format:
+
+Streamable http:
+```text
+/v0/groups/{group-name}/mcp
+```
+
+SSE:
+```text
+/v0/groups/{group-name}/sse
+/v0/groups/{group-name}/message
+```
+
+## Development mode vs Enterprise mode
+
+MCP Gateway supports 2 operating modes.
+
+### Development mode
+When you start mcp-gateway server, it runs in development mode by default.
+
+This mode is ideal for individuals running mcp-gateway locally for themselves.
+
+Use development mode when:
+
+- you want the shortest path to a working setup
+- you just need one clean MCP endpoint and minimal configuration hassle (sufficient for individual users)
+- you do not need governance or access control
+
+In development mode, clients connecting to `/mcp` can access all registered servers.
+
+### Enterprise mode
+This mode is ideal for teams running shared MCP infrastructure in an enterprise environment.
+
+Use enterprise mode when:
+
+- users need shared access to MCPs
+- you need authenticated client access to MCPs
+- you need Access Control
+- you need centralized management and governance features such as observability, audit logs, etc
+
+<Info>
+    MCP Gateway is currently free to use for both individuals and enterprises.
+</Info>
+
+## Initialization
+When mcp-gateway server is started for the first time, it needs to be initialized.
+
+If running in development mode, initialization is automatic, and you can already start using mcp-gateway.
+
+If running in enterprise mode, the server must be initialized by an administrator.
+
+Once a server is initialized, you cannot change its operating mode.
+
+## MCP Clients and Users
+This concept is only relevant in enterprise mode.
+
+Enterprise mode distinguishes between two identity types:
+
+- **MCP clients**: Non-human identities AI clients like Cursor, Claude, Codex, custom agents, etc. They authenticate to the gateway and receive access to specific servers.
+- **Users**: Human operators who use the CLI or HTTP API. Standard users can inspect and use MCP Gateway, but write access remains restricted to admins.
+
+## Stateless versus stateful sessions
+
+For each upstream server, MCP Gateway can manage connection lifecycle in one of two ways:
+
+- **Stateless**: Open a fresh connection for each tool call, then close it.
+- **Stateful**: Keep the connection open and reuse it across calls.
+
+Stateless is the default and should remain your first choice. Stateful is mainly useful for STDIO servers with slow startup costs or servers that rely on persistent session state.
+
+## Recommended mental model
+
+Think of MCP Gateway as three layers:
+
+1. **Upstream servers**: The actual capabilities.
+2. **MCP Gateway**: The control plane and unified gateway.
+3. **AI clients**: Claude, Cursor, Copilot, or agents consuming MCPs.
+
+## Documentation for AI Agents
+This documentation is also available over MCP at `https://github.com/zcray0326/mcp-gateway/tree/main/docs`, so AI agents can consume mcp-gateway's docs directly.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Register servers" icon="server" href="/guides/register-http-servers">
+    Add remote HTTP-based MCP servers to the gateway.
+  </Card>
+  <Card title="Register STDIO servers" icon="terminal" href="/guides/register-stdio-servers">
+    Add local process-based MCP servers such as filesystem or github.
+  </Card>
+  <Card title="Tool groups" icon="layer-group" href="/guides/tool-groups">
+    Expose narrower tool subsets to specific clients.
+  </Card>
+  <Card title="Enterprise overview" icon="building" href="/governance/overview">
+    Understand enterprise mode, client tokens, and shared deployment controls.
+  </Card>
+</CardGroup>

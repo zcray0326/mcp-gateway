@@ -1,0 +1,131 @@
+---
+title: "Installation"
+description: "Install and run the mcp-gateway CLI and gateway server"
+---
+
+MCP Gateway builds to a single binary.
+
+You will usually use this binary in two ways:
+
+- To run the MCP Gateway gateway server, which manages all upstream MCPs and serves the HTTP API & MCP endpoints
+- As a CLI client to manage the mcp-gateway server and interact with the mcp gateway
+
+Until this repository publishes its own release artifacts, build the CLI and gateway from source.
+
+<Tabs>
+  <Tab title="Source">
+    Clone the repository, build the embedded dashboard, and compile the Go binary:
+
+    ```bash
+    git clone https://github.com/zcray0326/mcp-gateway.git
+    cd mcp-gateway
+    bash scripts/build-dashboard.sh
+    go build -o mcp-gateway .
+    ```
+
+    Verify the installation:
+
+    ```bash
+    mcp-gateway version
+    ```
+  </Tab>
+
+  <Tab title="Docker">
+    Container images can be pulled after a release has been published to GHCR:
+
+    ```bash
+    docker pull ghcr.io/zcray0326/mcp-gateway
+    ```
+
+    The default image is light-weight & minimal. It contains only the `mcp-gateway` binary and the dependencies needed for runtime.
+
+    If you need to register stdio-based MCP servers that rely on `npx` or `uvx`, use the `stdio`-tagged image instead:
+
+    ```bash
+    docker pull ghcr.io/zcray0326/mcp-gateway:latest-stdio
+    ```
+
+    <Note>
+      The `stdio`-tagged image is significantly larger in size due to more dependencies being included.
+      Use it only when you need to run stdio-based MCP servers as well.
+    </Note>
+
+    For running the gateway locally, the recommended approach is to use Docker Compose. See the [Deploy with Docker](/deployment/docker) guide for details.
+  </Tab>
+
+  <Tab title="Binary">
+    Pre-built binaries will be available on the [GitHub Releases page](https://github.com/zcray0326/mcp-gateway/releases) after a release is published.
+
+    Download the binary for your platform, make it executable, and move it to a directory on your `PATH`.
+
+    Until then, [build the binary from source](/developers/development#building-and-testing).
+
+    Verify the installation after placing the binary on your `PATH`:
+
+    ```bash
+    mcp-gateway version
+    ```
+  </Tab>
+</Tabs>
+
+## Server
+
+You can use the binary to run the server directly on your host:
+
+```bash
+mcp-gateway start
+```
+
+This starts the server on port 8080 by default. You can run a quick health check:
+
+```bash
+curl http://localhost:8080/health
+```
+
+The CLI also connects to this address by default.
+
+If the following command also returns the server version, then your CLI is correctly connected to the server:
+
+```bash
+mcp-gateway version
+```
+
+## Configure a custom registry URL
+
+By default, the CLI connects to MCP Gateway at `http://127.0.0.1:8080`. If your server runs on a different host or port, configure the registry URL in one of two ways:
+
+<Tabs>
+    <Tab title="--registry flag">
+        Pass the URL inline with every command:
+
+        ```bash
+        mcp-gateway --registry http://my-server:9000 list tools
+        ```
+    </Tab>
+    <Tab title="Config file">
+        Create or edit `.mcp-gateway.conf` in your home directory so you don't repeat the flag:
+
+        ```yaml
+        registry_url: http://my-server:9000
+        ```
+    </Tab>
+</Tabs>
+
+You have now successfully installed mcp-gateway and connected the CLI to the server.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Deploy with Docker" icon="docker" href="/deployment/docker">
+    Choose the right Docker path for local development or a shared deployment.
+  </Card>
+  <Card title="Core Concepts" icon="diagram-project" href="/core-concepts">
+    Understand the difference between the CLI, the gateway, upstream MCP servers, and groups.
+  </Card>
+  <Card title="Add a streamable HTTP MCP server" icon="server" href="/guides/register-http-servers">
+    Register a remote MCP server and expose it through mcp-gateway.
+  </Card>
+  <Card title="Add a STDIO MCP server" icon="terminal" href="/guides/register-stdio-servers">
+    Register a local STDIO-based MCP server and expose it through mcp-gateway.
+  </Card>
+</CardGroup>

@@ -1,0 +1,140 @@
+---
+title: "Managing tool groups"
+description: "Reference for creating, inspecting, updating, and deleting tool groups from the mcp-gateway CLI."
+---
+
+Tool groups let you expose a curated subset of tools through their own MCP endpoint. They are useful when different agents or teams should only see a narrow tool surface instead of the full gateway.
+
+For the conceptual model and endpoint behavior, see [Tool groups](/guides/tool-groups).
+
+<Note>
+  Treat `mcp-gateway create group --help`, `get group --help`, and `update group --help` as the authoritative source for current flags. This page focuses on the important workflows and config shape.
+</Note>
+
+## `create group`
+
+Creates a new tool group from a JSON configuration file.
+
+```bash
+mcp-gateway create group --conf <file>
+```
+
+Minimal example:
+
+```json
+{
+  "name": "engineering-tools",
+  "description": "Tools for the engineering agent",
+  "included_tools": [
+    "github__create_issue",
+    "github__list_repos"
+  ],
+  "included_servers": [
+    "jira"
+  ],
+  "excluded_tools": [
+    "jira__delete_project"
+  ]
+}
+```
+
+Fields:
+
+- `name`: unique group name
+- `description`: optional description
+- `included_tools`: explicit tool names to include
+- `included_servers`: include all tools from these servers
+- `excluded_tools`: remove individual tools from the final set
+
+Example:
+
+```bash
+mcp-gateway create group --conf ./engineering-tools.json
+```
+
+After creation, mcp-gateway serves the group on:
+
+- `/v0/groups/{group-name}/mcp`
+- `/v0/groups/{group-name}/sse`
+- `/v0/groups/{group-name}/message`
+
+<Warning>
+  SSE support exists for compatibility, but it is a deprecated transport with limited support in mcp-gateway. Prefer the streamable HTTP endpoint.
+</Warning>
+
+Use `get group` for the full configuration and endpoint URLs.
+
+## `get group`
+
+Shows the stored definition of a tool group and the endpoint URLs it exposes.
+
+```bash
+mcp-gateway get group <name>
+```
+
+Example:
+
+```bash
+mcp-gateway get group engineering-tools
+```
+
+<Note>
+  `get group` shows the configured definition. If a tool in that definition is later disabled globally or removed entirely, it will still appear here even though it is no longer usable through the group endpoint.
+</Note>
+
+## `update group`
+
+Replaces the configuration of an existing group with a new JSON file.
+
+```bash
+mcp-gateway update group --conf <file>
+```
+
+Example:
+
+```bash
+mcp-gateway update group --conf ./engineering-tools.updated.json
+```
+
+The CLI reports what changed, including added or removed tools, servers, and exclusions.
+
+<Warning>
+  Updating a group takes effect immediately. Any tools removed from the configuration stop being available through that group's endpoint right away.
+</Warning>
+
+## `delete group`
+
+Deletes a tool group and removes its endpoint.
+
+```bash
+mcp-gateway delete group <name>
+```
+
+Example:
+
+```bash
+mcp-gateway delete group engineering-tools
+```
+
+Deleting a group does not delete the underlying tools or servers. It only removes the group definition and its dedicated endpoints.
+
+<Warning>
+    As soon as you delete a group, its MCP endpoint is no longer available.
+    Any mcp clients still relying on this endpoint will no longer be able to access it.
+</Warning>
+
+## Related commands
+
+Two related commands are often useful when working with groups:
+
+```bash
+# List only the tools currently active in a group
+mcp-gateway list tools --group engineering-tools
+
+# Invoke a tool while validating that it belongs to the group
+mcp-gateway invoke github__create_issue \
+  --input '{"owner":"myorg","repo":"myrepo","title":"Test"}' \
+  --group engineering-tools
+```
+
+Use [Tool groups](/guides/tool-groups) for the higher-level workflow and operational guidance.

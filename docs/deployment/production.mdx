@@ -1,0 +1,119 @@
+---
+title: "Deploy mcp-gateway in production"
+description: "Run mcp-gateway as a shared deployment in enterprise mode - for teams."
+---
+
+This guide covers the production operating model for mcp-gateway.
+
+When teams want shared access to MCPs in an enterprise environment, MCP Gateway should run in **enterprise mode** with a dedicated PostgreSQL database
+
+That is the mode intended for teams, internal platforms and organizations running MCP Gateway for shared MCP access.
+
+If your goal is simply to use MCPs locally for yourself, development mode is usually a better fit.
+
+## Start in enterprise mode
+
+You can enable enterprise mode in three ways:
+
+<Tabs>
+  <Tab title="CLI flag">
+    ```bash
+    mcp-gateway start --enterprise
+    ```
+  </Tab>
+  <Tab title="Environment variable">
+    ```bash
+    export SERVER_MODE=enterprise
+    mcp-gateway start
+    ```
+  </Tab>
+  <Tab title="Docker Compose">
+    Use the production compose file, which sets `SERVER_MODE=enterprise` by default:
+
+    ```bash
+    docker compose -f docker-compose.prod.yaml up -d
+    ```
+  </Tab>
+</Tabs>
+
+## Initialize the server once
+
+After the first boot in enterprise mode, run `mcp-gateway init-server` once from your client machine to create the initial admin identity and authenticate your CLI.
+
+For the exact bootstrap flow and command details, see:
+
+- [Access and governance overview](/governance/overview)
+- [Enterprise operations](/reference/cli-enterprise)
+
+## Recommended runtime pattern
+
+For a shared deployment, the recommended pattern is:
+
+1. Run the standard `ghcr.io/zcray0326/mcp-gateway:latest` image.
+2. Keep the CLI installed separately on operator machines.
+3. Point MCP Gateway at a separate PostgreSQL instance or cluster.
+
+## Run with Docker
+
+For production, use the standard (minimal) MCP Gateway image. It is based on `distroless/base` and contains only the `mcp-gateway` binary.
+
+Supply your database connection string with the `DATABASE_URL` environment variable:
+
+```bash
+docker run -d \
+  --name mcp-gateway-server \
+  -e SERVER_MODE=enterprise \
+  -e DATABASE_URL=postgres://user:password@your-db-host:5432/mcp-gateway \
+  -p 8080:8080 \
+  ghcr.io/zcray0326/mcp-gateway:latest
+```
+
+<Tip>
+  For production, deploy a separate managed Postgres cluster and point `DATABASE_URL` at it rather than running Postgres in the same container. See [Configure MCP Gateway's database](/deployment/database) for all database options.
+</Tip>
+
+## Graceful shutdown
+
+MCP Gateway handles `SIGTERM` for graceful shutdown. It closes all active stateful sessions, flushes telemetry, and stops accepting new connections before exiting.
+
+Send `SIGTERM` to stop the server cleanly:
+
+```bash
+# For a process running directly
+kill -SIGTERM <pid>
+
+# For a Docker container
+docker stop mcp-gateway-server
+```
+
+`docker stop` sends `SIGTERM` by default, so no extra flags are needed.
+
+## What enterprise mode enables
+
+| Feature | Development mode | Enterprise mode |
+|---------|-----------------|-----------------|
+| Authentication | Disabled | Required for Users & MCP clients |
+| Access control (ACLs) | Disabled | Enabled |
+| OpenTelemetry metrics | Disabled (opt-in) | Enabled by default |
+| Server initialization | Automatic | Manual (`init-server`) |
+
+<Info>
+  Even in enterprise mode, you can override metrics with `OTEL_ENABLED=false` if needed, though that is not the recommended default for shared deployments.
+</Info>
+
+## What to read next
+
+<CardGroup cols={2}>
+  <Card title="Database" icon="database" href="/deployment/database">
+    Configure PostgreSQL correctly for production use.
+  </Card>
+  <Card title="Observability" icon="chart-line" href="/deployment/observability">
+    Scrape Prometheus-compatible metrics from the `/metrics` endpoint.
+  </Card>
+  <Card title="Governance overview" icon="lock" href="/governance/overview">
+    Understand enterprise mode, tokens, clients, and users.
+  </Card>
+  <Card title="Access control" icon="shield-halved" href="/governance/access-control">
+    Give each MCP client access only to the servers it should reach.
+  </Card>
+</CardGroup>

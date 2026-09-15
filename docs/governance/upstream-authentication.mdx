@@ -1,0 +1,187 @@
+---
+title: "Authenticate to upstream MCP servers"
+description: "Configure mcp-gateway to make authenticated requests to upstream MCPs"
+---
+
+This page is about **upstream authentication**: how MCP Gateway authenticates when it calls an upstream MCP server.
+
+## When you need this
+
+Use upstream authentication when the MCP server you are registering requires some form of authentication (eg- static bearer token, custom headers, or OAuth).
+
+Typical examples:
+
+- SaaS-hosted MCP servers
+- Internal MCP servers behind an API gateway
+- Self-hosted MCP servers using static bearer-token auth
+- Hosted MCP servers that require OAuth approval during registration
+
+## Bearer token via CLI flag
+
+If the upstream server accepts a standard bearer token, pass it at registration time:
+
+```bash
+mcp-gateway register \
+  --name huggingface \
+  --description "HuggingFace MCP Server" \
+  --url https://huggingface.co/mcp \
+  --bearer-token <your-hf-api-token>
+```
+
+MCP Gateway will send:
+
+```text
+Authorization: Bearer <your-hf-api-token>
+```
+
+on requests to that upstream server.
+
+## Bearer token in a config file
+
+```json
+{
+  "name": "huggingface",
+  "transport": "streamable_http",
+  "url": "https://huggingface.co/mcp",
+  "description": "HuggingFace MCP Server",
+  "bearer_token": "<your-hf-api-token>"
+}
+```
+
+## Custom headers
+
+If the upstream server expects a non-standard authorization format or additional headers, use the `headers` field:
+
+```json
+{
+  "name": "sourcegraph",
+  "transport": "streamable_http",
+  "url": "https://sourcegraph.mycompany.com/.api/mcp",
+  "headers": {
+    "Authorization": "token <your-sourcegraph-token>",
+    "Custom-Header": "custom-value"
+  }
+}
+```
+
+If you set both `bearer_token` and `headers.Authorization`, the explicit header value should be treated as the more specific configuration.
+
+## Upstream OAuth during registration
+
+MCP Gateway now supports OAuth flows for upstream HTTP MCP servers in beta.
+
+The simplest path is interactive CLI registration:
+
+```bash
+mcp-gateway register --name todoist --url https://ai.todoist.net/mcp
+```
+
+If the upstream MCP server requires OAuth:
+
+1. MCP Gateway first tries a normal unauthenticated registration.
+2. If the upstream server responds with `401` and advertises OAuth, the CLI opens your browser.
+3. You approve the OAuth request.
+4. MCP Gateway stores the resulting token and completes server registration.
+
+<Note>
+This upstream OAuth support is currently beta.
+</Note>
+
+## OAuth fields in config files
+
+You can also configure the upstream OAuth flow explicitly in the server JSON config:
+
+```json
+{
+  "name": "todoist",
+  "transport": "streamable_http",
+  "url": "https://ai.todoist.net/mcp",
+  "oauth_redirect_uri": "http://127.0.0.1:8085/oauth/callback",
+  "oauth_client_id": "<optional pre-registered client id>",
+  "oauth_client_secret": "<optional client secret>",
+  "oauth_scopes": ["mcp.read"]
+}
+```
+
+Field meanings:
+
+- `oauth_redirect_uri`: callback URI used during the upstream OAuth flow
+- `oauth_client_id`: optional pre-registered OAuth client ID
+- `oauth_client_secret`: optional client secret associated with `oauth_client_id`
+- `oauth_scopes`: optional scopes to request during authorization
+
+If `oauth_client_id` is omitted, MCP Gateway attempts dynamic client registration when the upstream authorization server supports it.
+
+## Environment variable placeholders
+
+JSON config files support `${VAR_NAME}` placeholders in string fields, including `bearer_token` and header values:
+
+```json
+{
+  "name": "affine-main",
+  "transport": "streamable_http",
+  "url": "https://app.affine.pro/api/workspaces/${AFFINE_WORKSPACE_ID}/mcp",
+  "bearer_token": "${AFFINE_API_TOKEN}",
+  "headers": {
+    "X-Workspace": "${AFFINE_WORKSPACE_ID}"
+  }
+}
+```
+
+Placeholder expansion happens in the CLI process before the config is sent to MCP Gateway.
+
+See the [configuration file reference](/reference/config-file#var_name-placeholder-substitution) for the full substitution rules.
+
+## STDIO servers and auth via environment variables
+
+For STDIO-based MCP servers, authentication is typically passed through environment variables in the server config.
+
+Example:
+
+```json
+{
+  "name": "my-stdio-server",
+  "transport": "stdio",
+  "command": "uvx",
+  "args": ["my-server"],
+  "env": {
+    "API_TOKEN": "${API_TOKEN}"
+  }
+}
+```
+
+MCP Gateway will start the STDIO server process with those environment variables, allowing the upstream server to read its credentials from the process environment.
+
+## Important scope distinction
+
+Two different authentication layers can exist in the same deployment:
+
+- **Gateway authentication**: Enterprise-mode clients authenticating to MCP Gateway.
+- **Upstream authentication**: MCP Gateway authenticating to a registered MCP server.
+
+Those are separate concerns and use different configuration points.
+
+## Current limitations
+
+Current upstream OAuth support has some limitations:
+
+- The feature is currently beta
+- It is only supported for streamable HTTP transport
+- The oauth token stored is scoped to the whole gateway, ie, per-user oauth login is currently not supported
+
+## Related pages
+
+<CardGroup cols={2}>
+  <Card title="Register servers" icon="server" href="/guides/register-http-servers">
+    Register streamable HTTP MCP servers with CLI flags or config files.
+  </Card>
+  <Card title="Access control" icon="shield-halved" href="/governance/access-control">
+    Configure how MCP clients authenticate to the MCP Gateway gateway itself.
+  </Card>
+  <Card title="Clients and users" icon="users" href="/governance/clients-and-users">
+    Manage human and machine identities in enterprise mode.
+  </Card>
+  <Card title="Limitations" icon="triangle-exclamation" href="/limitations">
+    Review the remaining OAuth constraints and other current gaps.
+  </Card>
+</CardGroup>

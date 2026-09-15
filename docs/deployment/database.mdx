@@ -1,0 +1,118 @@
+---
+title: "Configure mcp-gateway's database"
+description: "Choose SQLite for local evaluation or PostgreSQL for serious deployments, and configure MCP Gateway with either a full DSN or Postgres-specific environment variables."
+---
+
+MCP Gateway requires a database to persist registered servers, tool groups, users, and related configuration.
+
+Use the database choice as a deployment signal:
+
+- **SQLite** for local evaluation and single-user experimentation.
+- **PostgreSQL** for anything shared, durable, or production-facing.
+
+## Default: SQLite
+
+When no database configuration is provided, MCP Gateway automatically creates a SQLite file named `mcp-gateway.db` in the directory where the process is started:
+
+```bash
+mcp-gateway start
+# Creates ./mcp-gateway.db in the current directory
+```
+
+SQLite requires no setup and works well for individuals running MCP Gateway locally. It is not recommended for production or multi-user deployments.
+
+If you do not provide PostgreSQL settings or a custom SQLite path, MCP Gateway uses `./mcp-gateway.db`.
+
+You can optionally set a custom path for the SQLite file using either a command-line flag or an environment variable:
+
+```bash
+mcp-gateway start --sqlite-db-path /path/to/my_custom_mcp_gateway.db
+
+# or
+export SQLITE_DB_PATH=/var/lib/mcp-gateway/.mcp-gateway.db
+mcp-gateway start
+```
+
+## PostgreSQL
+
+MCP Gateway supports PostgreSQL for serious deployments. You can configure it with either a full DSN or individual environment variables.
+
+### Option 1: Connection DSN
+
+Set the `DATABASE_URL` environment variable to a full Postgres connection string:
+
+<Tabs>
+  <Tab title="Direct binary">
+    ```bash
+    export DATABASE_URL=postgres://admin:secret@localhost:5432/mcp_gateway_db
+    mcp-gateway start
+    ```
+  </Tab>
+  <Tab title="Docker">
+    ```bash
+    docker run -d \
+      --name mcp-gateway-server \
+      -e DATABASE_URL=postgres://admin:secret@your-db-host:5432/mcp_gateway_db \
+      -p 8080:8080 \
+      ghcr.io/zcray0326/mcp-gateway:latest
+    ```
+  </Tab>
+</Tabs>
+
+### Option 2: Individual environment variables
+
+If you prefer not to construct a full DSN, set the individual Postgres variables instead. `POSTGRES_HOST` is required; all other variables are optional and have sensible defaults.
+
+```bash
+# Required
+export POSTGRES_HOST=localhost
+
+# Optional (defaults shown)
+export POSTGRES_PORT=5432
+export POSTGRES_USER=postgres
+export POSTGRES_PASSWORD=secret
+export POSTGRES_DB=postgres
+
+mcp-gateway start
+```
+
+Each credential variable also accepts a `_FILE` variant, which reads the value from a file. This is useful for Docker secrets and similar secret-injection mechanisms:
+
+| Variable | File variant | Default |
+|----------|-------------|---------|
+| `POSTGRES_USER` | `POSTGRES_USER_FILE` | `postgres` |
+| `POSTGRES_PASSWORD` | `POSTGRES_PASSWORD_FILE` | _(empty)_ |
+| `POSTGRES_DB` | `POSTGRES_DB_FILE` | `postgres` |
+
+Example using file-based secrets:
+
+```bash
+export POSTGRES_HOST=localhost
+export POSTGRES_USER_FILE=/run/secrets/pg_user
+export POSTGRES_PASSWORD_FILE=/run/secrets/pg_password
+export POSTGRES_DB_FILE=/run/secrets/pg_db
+
+mcp-gateway start
+```
+
+<Note>
+  If both a variable and its `_FILE` counterpart are set, the plain variable takes precedence.
+</Note>
+
+## Variable precedence
+
+When MCP Gateway starts, it resolves the database connection in this order:
+
+1. `DATABASE_URL` — used as-is if set
+2. `POSTGRES_HOST` (+ optional variables) — constructs a DSN if `POSTGRES_HOST` is set
+3. `--sqlite-db-path` — uses the configured SQLite file path from the CLI flag
+4. `SQLITE_DB_PATH` — uses the configured SQLite file path from the environment variable
+5. SQLite default — creates file `mcp-gateway.db` in the current directory
+
+## Production recommendations
+
+<Tip>
+  Deploy a separate Postgres cluster and supply its endpoint via `DATABASE_URL`. Running the database in a sidecar container is acceptable for development but not recommended for production.
+</Tip>
+
+The production Docker Compose file (`docker-compose.prod.yaml`) bundles a Postgres 17 container for convenience. For a real deployment, replace it with a managed database service and update the `DATABASE_URL` accordingly.

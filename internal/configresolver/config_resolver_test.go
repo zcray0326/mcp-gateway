@@ -1,0 +1,146 @@
+package configresolver
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/zcray0326/mcp-gateway/pkg/types"
+)
+
+func TestExpandEnvPlaceholders(t *testing.T) {
+	t.Setenv("MCPJ_TEST_HOST", "example.com")
+	t.Setenv("MCPJ_TEST_TOKEN", "secret-token")
+
+	testCases := []struct {
+		name    string
+		input   string
+		want    string
+		wantErr string
+	}{
+		{
+			name:  "exact placeholder",
+			input: "${MCPJ_TEST_TOKEN}",
+			want:  "secret-token",
+		},
+		{
+			name:  "embedded placeholder",
+			input: "https://${MCPJ_TEST_HOST}/mcp/${MCPJ_TEST_TOKEN}",
+			want:  "https://example.com/mcp/secret-token",
+		},
+		{
+			name:  "plain string unchanged",
+			input: "no-placeholders-here",
+			want:  "no-placeholders-here",
+		},
+		{
+			name:    "missing environment variable",
+			input:   "${MCPJ_TEST_MISSING}",
+			wantErr: "environment variable MCPJ_TEST_MISSING is not set",
+		},
+		{
+			name:    "invalid placeholder",
+			input:   "${MCPJ_TEST_TOKEN",
+			wantErr: "invalid environment variable placeholder",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := expandEnvPlaceholders(tc.input)
+			if tc.wantErr != "" {
+				if err == nil {
+					t.Fatalf("expected error %q, got nil", tc.wantErr)
+				}
+				if !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("expected error containing %q, got %q", tc.wantErr, err.Error())
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tc.want {
+				t.Fatalf("expected %q, got %q", tc.want, got)
+			}
+		})
+	}
+}
+
+func TestResolveConfigEnvVars(t *testing.T) {
+	type nestedConfig struct {
+		Command string
+		Headers map[string]string
+	}
+	type testConfig struct {
+		Name        string
+		URL         string
+		Args        []string
+		Env         map[string]string
+		Nested      nestedConfig
+		AccessToken types.AccessTokenRef
+	}
+
+	t.Setenv("MCPJ_TEST_NAME", "affine-main")
+	t.Setenv("MCPJ_TEST_ID", "workspace-123")
+	t.Setenv("MCPJ_TEST_TOKEN", "token-abc")
+
+	cfg := testConfig{
+		Name: "server-${MCPJ_TEST_NAME}",
+		URL:  "https://app.affine.pro/api/workspaces/${MCPJ_TEST_ID}/mcp",
+		Args: []string{"--token=${MCPJ_TEST_TOKEN}", "--fixed=value"},
+		Env: map[string]string{
+			"AFFINE_TOKEN": "${MCPJ_TEST_TOKEN}",
+		},
+		Nested: nestedConfig{
+			Command: "run-${MCPJ_TEST_NAME}",
+			Headers: map[string]string{
+				"Authorization": "Bearer ${MCPJ_TEST_TOKEN}",
+			},
+		},
+		AccessToken: types.AccessTokenRef{
+			Env: "TOKEN_${MCPJ_TEST_NAME}",
+		},
+	}
+
+	if err := ResolveEnvVars(&cfg); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if cfg.Name != "server-affine-main" {
+		t.Fatalf("expected resolved name, got %q", cfg.Name)
+	}
+	if cfg.URL != "https://app.affine.pro/api/workspaces/workspace-123/mcp" {
+		t.Fatalf("expected resolved URL, got %q", cfg.URL)
+	}
+	if cfg.Args[0] != "--token=token-abc" {
+		t.Fatalf("expected resolved arg, got %q", cfg.Args[0])
+	}
+	if cfg.Env["AFFINE_TOKEN"] != "token-abc" {
+		t.Fatalf("expected resolved env value, got %q", cfg.Env["AFFINE_TOKEN"])
+	}
+	if cfg.Nested.Command != "run-affine-main" {
+		t.Fatalf("expected resolved nested command, got %q", cfg.Nested.Command)
+	}
+	if cfg.Nested.Headers["Authorization"] != "Bearer token-abc" {
+		t.Fatalf("expected resolved header, got %q", cfg.Nested.Headers["Authorization"])
+	}
+	if cfg.AccessToken.Env != "TOKEN_affine-main" {
+		t.Fatalf("expected resolved nested struct field, got %q", cfg.AccessToken.Env)
+	}
+}
+
+func TestResolveConfigEnvVarsMissingVariable(t *testing.T) {
+	cfg := struct {
+		URL string
+	}{
+		URL: "https://example.com/${MCPJ_TEST_NOT_SET}",
+	}
+
+	err := ResolveEnvVars(&cfg)
+	if err == nil {
+		t.Fatal("expected an error for a missing environment variable")
+	}
+	if !strings.Contains(err.Error(), "environment variable MCPJ_TEST_NOT_SET is not set") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}

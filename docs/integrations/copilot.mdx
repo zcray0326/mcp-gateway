@@ -1,0 +1,104 @@
+---
+title: "Connect GitHub Copilot to mcp-gateway"
+description: "Add MCP Gateway as an MCP server in GitHub Copilot's mcp.json config and give Copilot Chat access to all your registered tools."
+---
+
+GitHub Copilot supports MCP servers through a `mcp.json` configuration file in your workspace or user settings. Pointing it at MCP Gateway lets Copilot Chat discover and call every tool registered in your gateway.
+
+## Prerequisites
+
+- MCP Gateway running at `http://localhost:8080` (or your deployment URL)
+- GitHub Copilot with MCP support enabled in VS Code or your editor
+
+## Configure GitHub Copilot
+
+Follow [GitHub's documentation on configuring MCP servers manually](https://docs.github.com/en/copilot/how-tos/provide-context/use-mcp/extend-copilot-chat-with-mcp#configuring-mcp-servers-manually-1) to locate or create the `mcp.json` file for your setup.
+
+<Steps>
+  <Step title="Open or create mcp.json">
+    Create or edit the `mcp.json` file in the location specified by GitHub Copilot's MCP documentation for your editor.
+  </Step>
+
+  <Step title="Add MCP Gateway as a server">
+    Add the following configuration:
+
+    ```json
+    {
+      "servers": {
+        "mcp-gateway": {
+          "url": "http://localhost:8080/mcp"
+        }
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Start the MCP Gateway server in Copilot">
+    After saving `mcp.json`, open Copilot Chat. You may see a **Start** button next to the MCP Gateway entry — click it to establish the connection.
+
+    <Note>
+      If Copilot does not automatically connect to MCP Gateway, look for a **Start** button in the MCP servers panel and click it manually.
+    </Note>
+  </Step>
+
+  <Step title="Test the connection">
+    In Copilot Chat, ask about available tools to confirm the connection is working:
+
+    ```
+    What MCP tools do you have access to?
+    ```
+
+    Copilot will query MCP Gateway and list the tools from all registered servers.
+  </Step>
+</Steps>
+
+## Enterprise mode (authentication)
+
+If your MCP Gateway instance runs in enterprise mode, create a dedicated MCP client for Copilot and include its access token in the request headers.
+
+Create the client with the MCP Gateway CLI:
+
+```bash
+mcp-gateway create mcp-client copilot-local --allow "server1, server2"
+```
+
+Then update `mcp.json` to send the token:
+
+```json
+{
+  "servers": {
+    "mcp-gateway": {
+      "url": "http://localhost:8080/mcp",
+      "headers": {
+        "Authorization": "Bearer YOUR_ACCESS_TOKEN"
+      }
+    }
+  }
+}
+```
+
+Replace `YOUR_ACCESS_TOKEN` with the token printed by `mcp-gateway create mcp-client`.
+
+<Warning>
+  In enterprise mode, a client can only access the servers listed in its `--allow` flag. If Copilot reports no tools, verify the client was created with the correct server names.
+</Warning>
+
+## Limit tools with Tool Groups
+
+If you have many MCP servers registered, use [Tool Groups](/guides/tool-groups) to expose only a relevant subset of tools to Copilot.
+
+Create a group and point `mcp.json` at its dedicated endpoint:
+
+```json
+{
+  "servers": {
+    "mcp-gateway": {
+      "url": "http://localhost:8080/v0/groups/copilot-tools/mcp"
+    }
+  }
+}
+```
+
+<Tip>
+  Run `mcp-gateway list tools` to see all registered tools, then create a group with only the tools your Copilot workflow needs.
+</Tip>

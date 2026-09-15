@@ -1,0 +1,127 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "name": "mcp-gateway",
+  "theme": "aspen",
+  "colors": {
+    "primary": "#5c64f4",
+    "light": "#acb4fc",
+    "dark": "#ffffff"
+  },
+  "favicon": "/images/logo.png",
+  "logo": {
+    "light": "/images/logo.png",
+    "dark": "/images/logo.png"
+  },
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/zcray0326/mcp-gateway"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/zcray0326/mcp-gateway"
+    }
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "quickstart",
+              "installation",
+              "core-concepts",
+              "support-matrix",
+              "roadmap",
+              "talk-to-us"
+            ]
+          },
+          {
+            "group": "Servers and Tools",
+            "pages": [
+              "guides/dashboard",
+              "guides/register-http-servers",
+              "guides/register-stdio-servers",
+              "guides/tools-and-prompts",
+              "guides/manage-resources",
+              "guides/tool-groups",
+              "guides/session-modes",
+              "guides/register-popular-servers"
+            ]
+          },
+          {
+            "group": "Integrations",
+            "pages": [
+              "integrations/claude",
+              "integrations/cursor",
+              "integrations/copilot"
+            ]
+          },
+          {
+            "group": "Deploy and Operate",
+            "pages": [
+              "deployment/docker",
+              "deployment/production",
+              "deployment/database",
+              "deployment/observability"
+            ]
+          },
+          {
+            "group": "Access and Governance",
+            "pages": [
+              "governance/overview",
+              "governance/upstream-authentication",
+              "governance/access-control",
+              "governance/clients-and-users"
+            ]
+          },
+          {
+            "group": "Limitations",
+            "pages": [
+              "limitations"
+            ]
+          },
+          {
+            "group": "Developers",
+            "pages": [
+              "developers/contributing",
+              "developers/development",
+              "developers/dashboard-development"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Reference",
+        "groups": [
+          {
+            "group": "CLI",
+            "pages": [
+              "reference/cli-overview",
+              "reference/cli-server",
+              "reference/cli-tools",
+              "reference/cli-groups",
+              "reference/cli-enterprise"
+            ]
+          },
+          {
+            "group": "API",
+            "pages": [
+              "reference/api-overview"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "reference/config-file",
+              "reference/environment-variables"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

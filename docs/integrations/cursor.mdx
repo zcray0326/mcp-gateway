@@ -1,0 +1,102 @@
+---
+title: "Connect Cursor to mcp-gateway"
+description: "Configure Cursor to connect directly to mcp-gateway over streamable HTTP and access all your registered MCP tools inside the IDE."
+---
+
+Cursor supports the streamable HTTP MCP transport natively, so you can point it directly at the MCP Gateway gateway. Once configured, Cursor's AI agent can discover and invoke every tool registered in MCP Gateway.
+
+## Prerequisites
+
+- MCP Gateway running at `http://localhost:8080` (or your deployment URL)
+- Cursor installed
+
+## Configure Cursor
+
+<Steps>
+  <Step title="Open MCP settings in Cursor">
+    In Cursor, open **Settings** and navigate to the **MCP** section.
+
+    Cursor stores MCP server configuration in a JSON file. You can edit it directly from the settings panel or open the file in your editor.
+  </Step>
+
+  <Step title="Add MCP Gateway as an MCP server">
+    Add the following entry to your Cursor MCP configuration:
+
+    ```json
+    {
+      "mcpServers": {
+        "mcp-gateway": {
+          "url": "http://localhost:8080/mcp"
+        }
+      }
+    }
+    ```
+
+    Unlike Claude Desktop, Cursor connects over HTTP directly — no `mcp-remote` bridge is needed.
+  </Step>
+
+  <Step title="Save and reload">
+    Save the configuration. Cursor will connect to MCP Gateway and load the available tools automatically.
+  </Step>
+
+  <Step title="Test the connection">
+    Open Cursor's agent chat and ask it to list the tools it has access to, or invoke a tool directly:
+
+    ```
+    What MCP tools are available?
+    ```
+
+    The agent will query MCP Gateway and return all tools from your registered servers.
+  </Step>
+</Steps>
+
+## Enterprise mode (authentication)
+
+If your MCP Gateway instance runs in enterprise mode, create a dedicated MCP client for Cursor and include its access token in the request headers.
+
+Create the client with the MCP Gateway CLI:
+
+```bash
+mcp-gateway create mcp-client cursor-local --allow "server1, server2"
+```
+
+Then update your Cursor MCP configuration to send the token:
+
+```json
+{
+  "mcpServers": {
+    "mcp-gateway": {
+      "url": "http://localhost:8080/mcp",
+      "headers": {
+        "Authorization": "Bearer YOUR_ACCESS_TOKEN"
+      }
+    }
+  }
+}
+```
+
+Replace `YOUR_ACCESS_TOKEN` with the token printed by `mcp-gateway create mcp-client`.
+
+<Warning>
+  In enterprise mode, a client can only access the servers listed in its `--allow` flag. If Cursor reports no tools, verify the client was created with the correct server names.
+</Warning>
+
+## Limit tools with Tool Groups
+
+When many MCP servers are registered, the full tool list can be long. Use [Tool Groups](/guides/tool-groups) to expose only the tools relevant to your Cursor workflow.
+
+Create a group and point Cursor at its dedicated endpoint:
+
+```json
+{
+  "mcpServers": {
+    "mcp-gateway": {
+      "url": "http://localhost:8080/v0/groups/cursor-tools/mcp"
+    }
+  }
+}
+```
+
+<Tip>
+  Create a separate Tool Group for each agent or workflow. This keeps the tool list focused and improves the agent's decision-making.
+</Tip>

@@ -1,0 +1,90 @@
+---
+title: "Stateful & Stateless server connections"
+description: "Understand MCP Gateway's two session modes, when persistent connections help, and why stateless should remain the default unless cold-start cost is a real problem."
+---
+
+When an MCP client calls a tool through MCP Gateway, the gateway must open a connection to the upstream MCP server, execute the tool, and return the result. How MCP Gateway manages that connection lifecycle is controlled by the server's **session mode**.
+
+## Stateless mode (default)
+
+In stateless mode, MCP Gateway opens a fresh connection to the upstream MCP server for every tool call. Once the call completes, the connection is closed immediately.
+
+In case of a http upstream server, this means a new HTTP request is made for each tool call.
+For a stdio server, this means a new process is spawned for each call.
+
+This is the default behavior and requires no configuration. It keeps memory usage predictable, avoids leaked connections, and means each tool call is fully independent of the last.
+
+## The cold-start problem
+
+Stateless mode introduces latency for MCP servers that take time to initialize.
+
+The most common case is STDIO transport servers: every tool call spawns a new process, the process starts up, executes the tool, and then exits.
+
+If a server process takes several seconds to start, each tool call incurs that startup cost. This is called the **cold-start problem**.
+
+## Stateful mode
+
+Stateful mode solves the cold-start problem by keeping the connection to the upstream server open across multiple tool calls.
+
+Set `session_mode` to `"stateful"` in your server config:
+
+```json
+{
+  "name": "filesystem",
+  "transport": "stdio",
+  "command": "npx",
+  "args": ["-y", "@modelcontextprotocol/server-filesystem", "."],
+  "session_mode": "stateful"
+}
+```
+
+With stateful mode enabled:
+
+1. The first tool call to this server establishes the connection (and spawns the process for STDIO servers).
+2. The connection remains open after the call completes.
+3. All subsequent tool calls to the same server reuse the existing connection, skipping the startup overhead entirely.
+
+## When is a stateful connection closed?
+
+A persistent connection is closed in three situations:
+
+<CardGroup cols={1}>
+  <Card title="MCP Gateway server stops" icon="power-off">
+    All stateful connections are closed during graceful shutdown of the MCP Gateway server process.
+  </Card>
+  <Card title="Server is deregistered" icon="trash">
+    Running `mcp-gateway deregister <name>` closes the connection and removes the server from the registry.
+  </Card>
+  <Card title="Idle timeout expires" icon="clock">
+    If `SESSION_IDLE_TIMEOUT_SEC` is set on the MCP Gateway server, connections that have been idle for longer than that duration are closed automatically.
+  </Card>
+</CardGroup>
+
+## Configuring the idle timeout
+
+The `SESSION_IDLE_TIMEOUT_SEC` environment variable controls how long MCP Gateway waits before closing an idle stateful connection. Set it on the MCP Gateway server before startup:
+
+```bash
+export SESSION_IDLE_TIMEOUT_SEC=300  # close connections idle for more than 5 minutes
+mcp-gateway start
+```
+
+The default value is `-1`, which disables the timeout entirely — stateful connections stay open until the server stops or the server is deregistered.
+
+| Value | Behavior                                                  |
+| ----- | --------------------------------------------------------- |
+| `-1`  | No timeout. Connection stays open indefinitely (default). |
+| `N`   | Connection closed after `N` seconds of inactivity.        |
+
+## Choosing a session mode
+
+<Tip>
+Use stateless mode whenever possible. It is simpler operationally, uses fewer long-lived resources, and is sufficient for most Streamable HTTP servers.
+</Tip>
+
+Use stateful mode when:
+
+- You are running STDIO servers that have a slow startup time (installing packages, loading large models, etc.).
+- The upstream server requires session state to be maintained between calls (for example, after a login step).
+
+Avoid stateful mode for servers that are fast to connect or where you want strict isolation between tool calls.

@@ -1,0 +1,119 @@
+---
+title: "HTTP API overview"
+description: "Overview of mcp-gateway server REST API and how to interact with it."
+---
+
+The MCP Gateway server exposes two families of HTTP endpoints: a REST management API under `/api/v0` for registering servers, invoking tools, and administering the system, and a set of MCP proxy endpoints that AI agents connect to directly. All responses are JSON unless otherwise noted.
+
+## Base URL
+
+```
+http://localhost:8080
+```
+
+The port is `8080` by default. Every REST management endpoint is prefixed with `/api/v0`. MCP proxy endpoints sit at the root and under `/v0`.
+
+## Authentication
+
+In **development mode**, the server doesn't enforce any authentication.
+
+In **enterprise mode** every request must carry a bearer token:
+
+```bash
+Authorization: Bearer <your-access-token>
+```
+
+Tokens are created per-user or per-MCP-client when you call `POST /api/v0/users` or `POST /api/v0/clients`. The admin token is returned when the server is initialized with `POST /init`.
+
+<Note>
+  Requests that arrive without a valid token in enterprise mode receive `401 Unauthorized`. Requests from a user-role token that target admin-only endpoints receive `403 Forbidden`.
+</Note>
+
+### Access levels
+
+| Role | What it can do |
+|------|----------------|
+| **Admin** | Full read/write access to all endpoints. Required for registering servers, managing clients, users, and tool groups. |
+| **User** | Read access and tool invocation. Can list servers, tools, prompts, and resources, and can call `POST /api/v0/tools/invoke`. |
+
+MCP clients (non-human agents) authenticate with their own tokens and are further restricted to the servers listed in their allow list.
+
+## Example request
+
+```bash
+curl http://localhost:8080/api/v0/servers \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+## Endpoint groups
+
+The REST API surface is organized into a few practical areas:
+
+- `Servers`: register, deregister, enable, and disable upstream MCP servers
+- `Tools, prompts, and resources`: list, inspect, invoke, and fetch content exposed through registered servers
+- `Tool groups`: create and manage curated subsets of tools for narrower MCP surfaces
+- `Clients and users`: enterprise-only identity and access management
+
+Use the CLI and governance guides for the current workflows while the API reference remains consolidated on this overview page.
+
+## System endpoints
+
+These endpoints sit outside the `/api/v0` prefix and require no authentication.
+
+### `GET /health`
+
+Returns `200 OK` when the server is running.
+
+```json
+{ "status": "ok" }
+```
+
+### `GET /metadata`
+
+Returns the running server version.
+
+```json
+{ "version": "0.4.2" }
+```
+
+## MCP proxy endpoints
+
+These endpoints implement the [Model Context Protocol](https://modelcontextprotocol.io) and are the connection targets for AI agents and MCP clients.
+
+| Endpoint | Transport | Description |
+|----------|-----------|-------------|
+| `ANY /mcp` | Streamable HTTP | Global MCP proxy. Exposes all enabled tools across all registered servers. |
+| `ANY /sse` | SSE | Legacy SSE transport for the global proxy. Use `/mcp` for new integrations. |
+| `ANY /message` | SSE | SSE message handler (companion to `/sse`). |
+| `GET /v0/groups/:name/mcp` | Streamable HTTP | Tool-group-scoped MCP proxy. Only exposes tools in the named group. |
+| `ANY /v0/groups/:name/sse` | SSE | SSE transport for a specific tool group. |
+| `ANY /v0/groups/:name/message` | SSE | SSE message handler for a specific tool group. |
+
+<Tip>
+  Point your MCP client at `/mcp` for full access or at `/v0/groups/:name/mcp` to restrict it to a named tool group. The streamable HTTP transport is preferred over SSE for new integrations.
+</Tip>
+
+## Metrics endpoint
+
+```
+GET /metrics
+```
+
+Exposed only when MCP Gateway is started with OpenTelemetry enabled. Returns Prometheus-format metrics. This endpoint is not secured by the standard bearer-token middleware — secure it at the network level if needed.
+
+## Error shape
+
+All error responses share a common JSON envelope:
+
+```json
+{ "error": "human-readable error message" }
+```
+
+| Status | Meaning |
+|--------|---------|
+| `400` | Invalid input — check the request body or query parameters. |
+| `401` | Missing or invalid bearer token. |
+| `403` | Token is valid but the role is insufficient. |
+| `404` | The requested resource does not exist. |
+| `409` | Conflict — e.g., a server with that name is already registered. |
+| `500` | Internal server error. |
